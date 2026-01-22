@@ -33,6 +33,7 @@ fn template_tree() -> TemplateNode {
                     ]
                 ),
             },
+            // Add a TransactionSchemas file for Atomic Adds
         ],
     }
 }

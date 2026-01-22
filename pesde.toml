@@ -8,8 +8,8 @@ includes = ["pesde.toml", "LICENSE", "README.md", "src/**"]
 
 [target]
 environment = "roblox"
-lib = "src/init.luau"
-build_files = ["src"]
+lib = "abserde/init.luau"
+build_files = ["abserde"]
 
 [indices]
 default = "https://github.com/pesde-pkg/index"

@@ -2,11 +2,20 @@ local Pack = require(script.Parent.roblox_packages.Pack)
 local Promise = require(script.Parent.roblox_packages.Promise)
 
 export type Profile<T> = {
-	Open: <T>(self: Profile<T>, user: user) -> Session<T>,
-	Find: <T>(self: Profile<T>, user: user) -> Session<T>?,
+	ClassName: "AbserdeProfile",
+	Name: string,
+	Options: ProfileOptions<T>,
+
+	Open: <T>(self: Profile<T>, user: user) -> Promise.TypedPromise<Session<T>>,
+	Find: <T>(self: Profile<T>, user: user) -> Session<T>?, -- Immediately fetches an existing session if there is one. Will not open a session.
+}
+
+export type ProfileOptions<T> = {
+	Keys: T, -- Map of string -> KeyOptions
 }
 
 export type Session<T> = {
+	ClassName: "AbserdeSession",
 	Data: T,
 	-- Will be true if the session has been locked by another server
 	Locked: boolean,
@@ -28,6 +37,7 @@ export type Session<T> = {
 
 export type KeyOptions<T> = {
 	Schema: _AbserdeSchema<T>,
+	Default: T,
 	Lockable: boolean, -- [true] A locked key cannot be modified by other servers
 	AutoLoad: boolean, -- [true] Automatically loads the key when the session is opened, otherwise will be loaded when indexed
 }
@@ -35,7 +45,6 @@ export type KeyOptions<T> = {
 export type Key<T> = {
 	Options: KeyOptions<T>,
 	Data: T,
-	Default: T,
 	_dirty: boolean, -- Do we have unsaved changes?
 	_lastSaved: number?,
 }
@@ -46,7 +55,7 @@ export type _AbserdeSchema<T> = {
 	version: number,
 }
 
-type user = Player | number
+export type user = Player | number
 
 export type Abserde = {}
 

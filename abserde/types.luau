@@ -11,6 +11,7 @@ export type Profile<T> = {
 }
 
 export type ProfileOptions<T> = {
+	Name: string, -- The name of the profile, used to uniquely identify datastores by profile and key.
 	Keys: T, -- Map of string -> KeyOptions
 }
 
@@ -25,6 +26,9 @@ export type Session<T> = {
 	-- Manually saves all keys in the session (that have been modified)
 	-- Only works if the session is not locked by another server
 	Save: (self: Session<T>) -> Promise.Promise,
+	-- Saves and releases (if possible), and removes the session from memory.
+	-- This happens automatically when a player leaves if their session was created from the Player object instead of their UserId.
+	Close: (self: Session<T>) -> Promise.Promise,
 
 	-- Atomic methods work even if the session is locked by another server
 	-- Use these when you need to modify a session of a user that may not be in this server
@@ -35,18 +39,28 @@ export type Session<T> = {
 	AtomicRemove: (self: Session<T>, key: string) -> Promise.TypedPromise<boolean>,
 }
 
+export type CompressionSettings = {
+	algorithm: Enum.CompressionAlgorithm,
+	compressionLevel: number?,
+}
+
 export type KeyOptions<T> = {
 	Schema: _AbserdeSchema<T>,
 	Default: T,
-	Lockable: boolean, -- [true] A locked key cannot be modified by other servers
-	AutoLoad: boolean, -- [true] Automatically loads the key when the session is opened, otherwise will be loaded when indexed
+	Lockable: boolean?, -- [true] A locked key cannot be modified by other servers
+	LockAttempts: number?, -- [5] Max number of attempts to aquire a lock when encountering MemoryStore issues.
+	LockInterval: number?, -- [60] (seconds) How often to relock a key or obtain a lock.
+	AutoLoad: boolean?, -- [true] Automatically loads the key when the session is opened, otherwise will be loaded when indexed
+	AutosaveInterval: number?, -- [5] (minutes) Automatically saves the data at this interval if the key is loaded and has unsaved changes. Set to 0 to disable autosave.
+	Compression: CompressionSettings?,
 }
 
 export type Key<T> = {
+	ClassName: "Key",
 	Options: KeyOptions<T>,
 	Data: T,
-	_dirty: boolean, -- Do we have unsaved changes?
-	_lastSaved: number?,
+	Loaded: boolean, -- Has the key been loaded from the datastore?
+	Locked: boolean, -- Is the key currently locked by another server?
 }
 
 export type _AbserdeSchema<T> = {

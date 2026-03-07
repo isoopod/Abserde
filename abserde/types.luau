@@ -53,6 +53,7 @@ export type KeyOptions<T> = {
 	AutoLoad: boolean?, -- [true] Automatically loads the key when the session is opened, otherwise will be loaded when indexed
 	AutosaveInterval: number?, -- [5] (minutes) Automatically saves the data at this interval if the key is loaded and has unsaved changes. Set to 0 to disable autosave.
 	Compression: CompressionSettings?,
+	TransformationFile: string?, -- The name of a file in the Transformations folder that defines data transformations for this key for version migration.
 }
 
 export type Key<T> = {

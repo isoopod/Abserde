@@ -1,9 +1,8 @@
 --!strict
-local EncodingService = game:GetService("EncodingService")
-local MemoryStoreService = game:GetService("MemoryStoreService")
 
 -- Services
-
+local EncodingService = game:GetService("EncodingService")
+local MemoryStoreService = game:GetService("MemoryStoreService")
 -- Modules
 local Promise = require(script.Parent.roblox_packages.Promise)
 local Schemas = require(script.Parent.Schemas)
@@ -156,6 +155,10 @@ function Key._Load<T>(self: _Key<T>): Promise.TypedPromise<T?>
 		if not schema then return reject(`No schema found with version {schemaVersion}`) end
 
 		local rawData = schema.schema:Read(data)
+
+		-- TODO: Handle data transformations for version migrations
+		-- These will be their own files in the Transformations folder
+		-- Transformations apply based on the last saved version. Any transformations above that version will be applied in order until we are up to date.
 
 		-- Hydrate the existing data with the default value so that missing keys are filled in, but existing values are not overwritten
 		if Utils.deepMerge(rawData, self._options.Default or {}) then self._dirty = true end

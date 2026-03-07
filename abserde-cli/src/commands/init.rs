@@ -33,6 +33,14 @@ fn template_tree() -> TemplateNode {
                     ]
                 ),
             },
+            TemplateNode::Dir {
+                name: "Transformations",
+                children: &(
+                    [
+                        // Add an example transformation file here
+                    ]
+                ),
+            },
             // Add a TransactionSchemas file for Atomic Adds
         ],
     }

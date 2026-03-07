@@ -2,8 +2,8 @@
 
 -- Services
 local DataStoreService = game:GetService("DataStoreService")
-local MemoryStoreService = game:GetService("MemoryStoreService")
 -- Modules
+local Key = require(script.Parent.Key)
 local types = require(script.Parent.types)
 
 local AbserdeSession = {}
@@ -19,7 +19,7 @@ local function getDataStore(profileName: string, key: string): DataStore
 	return datastoreCache[cacheKey]
 end
 
-function AbserdeSessionClass.new<T>(profile: types.ProfileOptions<T>, userid: number): types.Session<T>
+function AbserdeSessionClass.new<T>(profile: types.ProfileOptions<T>, userid: number, readOnly: boolean?): types.Session<T>
 	assert(#profile.Name <= 24, "Profile names cannot exceed 24 characters")
 	local self: _AbserdeSession<T> = setmetatable({}, AbserdeSessionClass.metatable) :: any
 
@@ -33,8 +33,7 @@ function AbserdeSessionClass.new<T>(profile: types.ProfileOptions<T>, userid: nu
 		assert(#key <= 25, "Profile key names cannot exceed 25 characters")
 		local datastore = getDataStore(profile.Name, key)
 
-		if options.AutoLoad then
-		end
+		data[key] = Key.new(options, datastore, userid, options.AutoLoad, readOnly)
 	end
 
 	self.Data = table.freeze(data)

@@ -8,6 +8,7 @@ export type Profile<T> = {
 
 	Open: <T>(self: Profile<T>, user: user) -> Promise.TypedPromise<Session<T>>,
 	Find: <T>(self: Profile<T>, user: user) -> Session<T>?, -- Immediately fetches an existing session if there is one. Will not open a session.
+	OpenLocked: <T>(self: Profile<T>, user: user) -> Promise.TypedPromise<Session<T>>, -- Opens a read only session (still supports atomic operations).
 }
 
 export type ProfileOptions<T> = {
@@ -48,7 +49,6 @@ export type KeyOptions<T> = {
 	Schema: _AbserdeSchema<T>,
 	Default: T,
 	Lockable: boolean?, -- [true] A locked key cannot be modified by other servers
-	LockAttempts: number?, -- [5] Max number of attempts to aquire a lock when encountering MemoryStore issues.
 	LockInterval: number?, -- [60] (seconds) How often to relock a key or obtain a lock.
 	AutoLoad: boolean?, -- [true] Automatically loads the key when the session is opened, otherwise will be loaded when indexed
 	AutosaveInterval: number?, -- [5] (minutes) Automatically saves the data at this interval if the key is loaded and has unsaved changes. Set to 0 to disable autosave.

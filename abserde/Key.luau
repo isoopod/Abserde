@@ -14,6 +14,8 @@ local Key = {}
 local KeyClass = { metatable = { __index = Key } }
 
 type _Key<T> = types.Key<T> & {
+	_loading: boolean,
+	_readOnly: boolean,
 	_dirty: boolean, -- Do we have unsaved changes?
 	_lastSaved: number?,
 	_options: types.KeyOptions<T>,
@@ -21,14 +23,19 @@ type _Key<T> = types.Key<T> & {
 	_memlock: MemoryStoreSortedMap,
 	_user: number,
 	_jobs: { thread },
+	_data: T?,
 
 	_Lock: (self: _Key<T>) -> Promise.TypedPromise<boolean>,
-	_Load: <T>(self: _Key<T>) -> Promise.TypedPromise<T?>,
+	_Unlock: (self: _Key<T>) -> Promise.Promise,
+	_Save: (self: _Key<T>) -> Promise.Promise,
+	_Load: (self: _Key<T>) -> Promise.TypedPromise<T?>,
+	_EnsureLoaded: (self: _Key<T>) -> (),
 }
 
 Key.ClassName = "Key"
 
 function Key._Lock<T>(self: _Key<T>): Promise.TypedPromise<boolean>
+	if not self.Options.Lockable or self._readOnly then return Promise.resolve(false) end
 	local interval, user, memlock = self._options.LockInterval or 60, tostring(self._user), self._memlock
 
 	return Promise.retryWithDelay(function()
@@ -57,13 +64,59 @@ function Key._Lock<T>(self: _Key<T>): Promise.TypedPromise<boolean>
 	end)
 end
 
+function Key._Unlock<T>(self: _Key<T>): Promise.Promise
+	if not (self.Options.Lockable and not self.Locked) then return Promise.resolve() end
+	local user, memlock = tostring(self._user), self._memlock
+
+	return Promise.new(function(resolve, reject)
+		local success, err = pcall(memlock.RemoveAsync, memlock, user)
+		if not success then
+			warn(`Failed to release lock for key {self._datastore.Name} for user {self._user}: {err}`)
+			return reject(err)
+		end
+		resolve()
+	end)
+end
+
+function Key._Save<T>(self: _Key<T>): Promise.Promise
+	if not self._dirty or self._readOnly or (self.Options.Lockable and self.Locked) then return Promise.resolve() end
+
+	return Promise.new(function(resolve, reject)
+		local success, schemaInfo, dataToSave, err
+
+		success, schemaInfo = pcall(Schemas.GetSchema, self.Options.Schema.name, nil)
+		if not success then return reject(`Failed to get schema for key {self._datastore.Name} for user {self._user}: {schemaInfo}`) end
+
+		assert(schemaInfo)
+		success, dataToSave = pcall(schemaInfo.schema.Write, schemaInfo.schema, self._data)
+		if not success then return reject(`Failed to encode data for key {self._datastore.Name} for user {self._user}: {dataToSave}`) end
+
+		if self._options.Compression then
+			dataToSave = EncodingService:CompressBuffer(dataToSave, self._options.Compression.algorithm, self._options.Compression.compressionLevel)
+		end
+
+		local metadata = {
+			SchemaVersion = schemaInfo.version,
+			CompressionAlgorithm = if self._options.Compression then self._options.Compression.algorithm.Name else nil,
+		}
+
+		success, err = pcall(self._datastore.SetAsync, self._datastore, tostring(self._user), dataToSave, metadata)
+		if not success then return reject(`Datastore SetAsync failed for key {self._datastore.Name} for user {self._user}: {err}`) end
+
+		self._dirty = false
+		self._lastSaved = time()
+		resolve()
+	end)
+end
+
 function Key._Load<T>(self: _Key<T>): Promise.TypedPromise<T?>
-	if not self.Loaded and self._options.Lockable then
+	if not self._loading and self._options.Lockable then
+		self._loading = true
 		table.insert(
 			self._jobs,
 			task.spawn(function()
 				while true do
-					self.Locked = not self:_Lock()
+					self.Locked = not self:_Lock():expect()
 					task.wait(self._options.LockInterval or 60)
 				end
 			end)
@@ -71,9 +124,23 @@ function Key._Load<T>(self: _Key<T>): Promise.TypedPromise<T?>
 	end
 
 	return Promise.new(function(resolve, reject)
-		local success, data, info = pcall(self._datastore.GetAsync, self._datastore, tostring(self._user), nil)
-		if not success then return reject(`Datastore GetAsync failed: {data}`) end
+		local success, data, info
+		local attempt = 0
+		while not success do
+			success, data, info = pcall(self._datastore.GetAsync, self._datastore, tostring(self._user), nil)
+			if not success then
+				attempt += 1
+				warn(`[Attempt {attempt}] Datastore GetAsync failed for key {self._datastore.Name} for user {self._user}: {data}`)
+				task.wait(5)
+			end
+		end
+		assert(data and info)
 
+		if data == nil then
+			-- No existing data, start with default
+			self._dirty = true
+			return resolve(Utils.deepClone(self._options.Default))
+		end
 		if type(data) ~= "buffer" then return reject(`Expected existing data to be of type buffer Got {type(data)}`) end
 
 		local metadata = info:GetMetadata()
@@ -88,16 +155,28 @@ function Key._Load<T>(self: _Key<T>): Promise.TypedPromise<T?>
 		local schema = Schemas.GetSchema(self.Options.Schema.name, schemaVersion)
 		if not schema then return reject(`No schema found with version {schemaVersion}`) end
 
-		resolve(schema.schema:Read(data))
+		local rawData = schema.schema:Read(data)
+
+		-- Hydrate the existing data with the default value so that missing keys are filled in, but existing values are not overwritten
+		if Utils.deepMerge(rawData, self._options.Default or {}) then self._dirty = true end
+
+		resolve(rawData)
 	end):catch(function(err)
 		warn(`Failed to load key {self._datastore.Name} for user {self._user}: {err}`)
 		return Utils.deepClone(self._options.Default)
 	end)
 end
 
-function KeyClass.new<T>(options: types.KeyOptions<T>, datastore: DataStore, user: number, load: boolean?): types.Key<T>
+function Key._EnsureLoaded<T>(self: _Key<T>)
+	if self.Loaded then return end
+	self._data = self:_Load():expect()
+	self.Loaded = true
+end
+
+function KeyClass.new<T>(options: types.KeyOptions<T>, datastore: DataStore, user: number, load: boolean?, readOnly: boolean?): types.Key<T>
 	local self: _Key<T> = setmetatable({}, KeyClass.metatable) :: _Key<T>
 
+	self._readOnly = not not readOnly
 	self._options = options
 	self._datastore = datastore
 	self._memlock = MemoryStoreService:GetSortedMap(datastore.Name)
@@ -105,12 +184,58 @@ function KeyClass.new<T>(options: types.KeyOptions<T>, datastore: DataStore, use
 	self._dirty = false
 	self._lastSaved = time()
 
-	local data = if load then self:_Load():await() else nil
+	if load then self:_EnsureLoaded() end
 
-	-- TODO Make a deepproxy for data so that we can set the dirty flag and prevent direct modification when locked
-	-- Also needs to load the datastore if it hasnt been loaded yet
+	local proxyCache = setmetatable({}, { __mode = "k" })
+	local function createProxy(tbl: any, path: string)
+		if type(tbl) ~= "table" then return tbl end
+		if proxyCache[tbl] then return proxyCache[tbl] end
+
+		local proxy = setmetatable({}, {
+			__index = function(_, key: string)
+				self:_EnsureLoaded()
+
+				local targetTbl = if path == "" then self._data else tbl
+				local val = targetTbl[key]
+
+				if type(val) == "table" and rawget(val, "__value") and not next(val, "__value") then return val.__value end
+				if type(val) == "table" then return createProxy(val, Utils.concatPath(path, key)) end
+				return val
+			end,
+			__newindex = function(_, key: string, newVal: unknown)
+				self:_EnsureLoaded()
+
+				if self._options.Lockable and self.Locked then
+					warn(`Attempted to write to locked key {self._datastore.Name} for user {self._user}`)
+					return
+				end
+
+				local targetTbl = if path == "" then self._data else tbl
+				local oldVal = targetTbl[key]
+
+				if oldVal ~= newVal then
+					targetTbl[key] = newVal
+					self._dirty = true
+				end
+			end,
+			__pairs = function()
+				self:_EnsureLoaded()
+
+				local targetTbl = if path == "" then self._data else tbl
+				return function(_, k)
+					local nk, nv = next(targetTbl, k)
+					return nk, nv
+				end, nil, nil
+			end,
+		})
+
+		proxyCache[tbl] = proxy
+		return proxy
+	end
 
 	self.Loaded = not not load
+
+	self.Data = createProxy({}, "")
 
 	return self
 end

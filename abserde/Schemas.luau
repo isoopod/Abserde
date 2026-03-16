@@ -1,11 +1,11 @@
--- Services
-local ServerScriptService = game:GetService("ServerScriptService")
+--!optimize 2
+
 -- Modules
 local Pack = require(script.Parent.roblox_packages.Pack)
+local Utils = require(script.Parent.Utils)
 local types = require(script.Parent.types)
 
--- stylua: ignore
-local PROJECT = assert(ServerScriptService:FindFirstChild("abserde_project"), "No abserde_project found in ServerScriptService, create one with `abserde init`.") :: types.AbserdeProject
+local PROJECT = Utils.PROJECT
 
 local Schemas = {}
 

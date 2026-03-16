@@ -1,4 +1,4 @@
---!strict
+--!optimize 2
 
 -- Services
 local EncodingService = game:GetService("EncodingService")
@@ -8,6 +8,8 @@ local Promise = require(script.Parent.roblox_packages.Promise)
 local Schemas = require(script.Parent.Schemas)
 local Utils = require(script.Parent.Utils)
 local types = require(script.Parent.types)
+
+local PROJECT = Utils.PROJECT
 
 local Key = {}
 local KeyClass = { metatable = { __index = Key } }
@@ -109,6 +111,7 @@ function Key._Save<T>(self: _Key<T>): Promise.Promise
 end
 
 function Key._Load<T>(self: _Key<T>): Promise.TypedPromise<T?>
+	-- If this is a lockable key and its our first time loading, start the lock loop
 	if not self._loading and self._options.Lockable then
 		self._loading = true
 		table.insert(
@@ -122,10 +125,18 @@ function Key._Load<T>(self: _Key<T>): Promise.TypedPromise<T?>
 		)
 	end
 
-	return Promise.new(function(resolve, reject)
+	return Promise.new(function(resolve, reject, onCancel)
+		local cancelled = false
+		onCancel(function()
+			cancelled = true
+		end)
+
+		-- Attempt to load the datastore value. Will retry forever every 5 seconds until it succeeds, unless the promise is cancelled
+		-- This is to handle transient datastore errors that can occur, especially with large data. We don't want to fail loading just because of a temporary error
 		local success, data, info
 		local attempt = 0
 		while not success do
+			if cancelled then return reject("Promise cancelled") end
 			success, data, info = pcall(self._datastore.GetAsync, self._datastore, tostring(self._user), nil)
 			if not success then
 				attempt += 1
@@ -142,10 +153,12 @@ function Key._Load<T>(self: _Key<T>): Promise.TypedPromise<T?>
 		end
 		if type(data) ~= "buffer" then return reject(`Expected existing data to be of type buffer Got {type(data)}`) end
 
+		-- We save metadata in the datastore incase certain settings like compression change in the Profile. This allows us to still load old data correctly
 		local metadata = info:GetMetadata()
 		local schemaVersion = metadata.SchemaVersion
 		local compressionAlgorithmName = metadata.CompressionAlgorithm
 
+		-- If this data was compressed, decompress before decoding
 		if compressionAlgorithmName then
 			local compressionAlgorithm = Enum.CompressionAlgorithm:FromName(metadata.CompressionAlgorithm or "")
 			if compressionAlgorithm then data = EncodingService:DecompressBuffer(data, compressionAlgorithm) end
@@ -156,9 +169,29 @@ function Key._Load<T>(self: _Key<T>): Promise.TypedPromise<T?>
 
 		local rawData = schema.schema:Read(data)
 
-		-- TODO: Handle data transformations for version migrations
-		-- These will be their own files in the Transformations folder
-		-- Transformations apply based on the last saved version. Any transformations above that version will be applied in order until we are up to date.
+		-- Handle data transformations for version migrations
+		-- Transformations apply based on the last saved version. Any transformations above that version will be applied in order until we are up to date
+		local transformation = self.Options.TransformationFile
+		local transformationFile = transformation and PROJECT.Transformations:FindFirstChild(transformation)
+		if transformationFile then
+			local s, transformations = pcall(require, transformationFile)
+			if s then
+				-- Since the transformation file might be sparse (missing some versions), we need to build an ordered list of versions to iterate over
+				local versions = {}
+				for v in transformations do
+					table.insert(versions, v)
+				end
+				table.sort(versions)
+				-- Apply transformations in order
+				for _, version in versions do
+					if version > schemaVersion then rawData = transformations[version](rawData) end
+				end
+			else
+				warn(`Failed to load transformation file {transformationFile.Name}: {transformations}`)
+			end
+		elseif transformation then
+			warn(`Transformation file {transformation} not found in project Transformations folder`)
+		end
 
 		-- Hydrate the existing data with the default value so that missing keys are filled in, but existing values are not overwritten
 		if Utils.deepMerge(rawData, self._options.Default or {}) then self._dirty = true end

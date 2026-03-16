@@ -1,6 +1,14 @@
 --!optimize 2
 
+-- Services
+local ServerScriptService = game:GetService("ServerScriptService")
+-- Modules
+local types = require(script.Parent.types)
+
 local utils = {}
+
+-- stylua: ignore
+utils.PROJECT = assert(ServerScriptService:FindFirstChild("abserde_project"), "No abserde_project found in ServerScriptService, create one with `abserde init`.") :: types.AbserdeProject
 
 local function deepClone<T>(tbl: T): T
 	if type(tbl) ~= "table" then return tbl end

@@ -64,6 +64,12 @@ export type Key<T> = {
 	Locked: boolean, -- Is the key currently locked by another server?
 }
 
+export type TransformationFile = {
+	-- Number is the version we are migrating to.
+	-- Data will be from some previous version, and before any new defaults have been applied.
+	[number]: (data: any) -> any,
+}
+
 export type _AbserdeSchema<T> = {
 	schema: Pack.Schema<T>,
 	name: string,
@@ -81,6 +87,7 @@ export type AbserdeProject = instNode<Folder, {
 		[string]: ModuleScript,
 	}>,
 	Profiles: instNode<Folder, { [string]: ModuleScript }>,
+	Transformations: instNode<Folder, { [string]: ModuleScript }>,
 }>
 
 return nil

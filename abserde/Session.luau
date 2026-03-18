@@ -13,25 +13,25 @@ type _AbserdeSession<T> = types.Session<T> & {}
 AbserdeSession.ClassName = "AbserdeSession"
 
 local datastoreCache: { [string]: DataStore } = {}
-local function getDataStore(profileName: string, key: string): DataStore
-	local cacheKey = `{profileName}_{key}`
+local function getDataStore(profileName: string, key: string, slot: number): DataStore
+	local cacheKey = `{profileName}_{key}{slot - 1}`
 	if not datastoreCache[cacheKey] then datastoreCache[cacheKey] = DataStoreService:GetDataStore(cacheKey) end
 	return datastoreCache[cacheKey]
 end
 
-function AbserdeSessionClass.new<T>(profile: types.ProfileOptions<T>, userid: number, readOnly: boolean?): types.Session<T>
+function AbserdeSessionClass.new<T>(profile: types.ProfileOptions<T>, userid: number, slot: number, readOnly: boolean?): types.Session<T>
 	assert(#profile.Name <= 24, "Profile names cannot exceed 24 characters")
 	local self: _AbserdeSession<T> = setmetatable({}, AbserdeSessionClass.metatable) :: any
 
 	local data = {}
-	-- TODO: Load each key, handle locking, versions refinement, etc.
-	-- Datastore names are `{profile.Name}_{key}`
+	-- Datastore names are `{profile.Name}_{key}{slot - 1}`
+	-- TODO: encode slot as base64 to allow for 64 slots instead of 10
 	-- Datastore key is just userid
 
 	-- The schema version will be stored as metadata for the key
 	for key, options in profile.Keys :: { [string]: types.KeyOptions<any> } do
-		assert(#key <= 25, "Profile key names cannot exceed 25 characters")
-		local datastore = getDataStore(profile.Name, key)
+		assert(#key <= 24, "Profile key names cannot exceed 24 characters")
+		local datastore = getDataStore(profile.Name, key, slot)
 
 		data[key] = Key.new(options, datastore, userid, options.AutoLoad, readOnly)
 	end

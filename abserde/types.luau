@@ -6,14 +6,20 @@ export type Profile<T> = {
 	Name: string,
 	Options: ProfileOptions<T>,
 
-	Open: <T>(self: Profile<T>, user: user) -> Promise.TypedPromise<Session<T>>,
-	Find: <T>(self: Profile<T>, user: user) -> Session<T>?, -- Immediately fetches an existing session if there is one. Will not open a session.
-	OpenLocked: <T>(self: Profile<T>, user: user) -> Promise.TypedPromise<Session<T>>, -- Opens a read only session (still supports atomic operations).
+	-- Slot must be provided if the profile has multislot enabled.
+	Open: <T>(self: Profile<T>, user: user, slot: number?) -> Promise.TypedPromise<Session<T>>, -- Finds or opens a session for the given user and slot.
+	Find: <T>(self: Profile<T>, user: user, slot: number?) -> Session<T>?, -- Immediately fetches an existing session if there is one. Will not open a session.
+	OpenLocked: <T>(self: Profile<T>, user: user, slot: number?) -> Promise.TypedPromise<Session<T>>, -- Opens a read only session (still supports atomic operations).
+	-- This read only session will not automatically closed if opened with a player object.
+	-- Will open a separate, read only session even if there is already a writable session for the same user and slot.
+	-- A read only session cannot be found with Find, and will not be cached.
 }
 
 export type ProfileOptions<T> = {
 	Name: string, -- The name of the profile, used to uniquely identify datastores by profile and key.
 	Keys: T, -- Map of string -> KeyOptions
+	SlotLimit: number?, -- [nil; 1-10?] If a number between 1 and 10, this profile will have multislot enabled,
+	-- allowing for selected keys to have independent save files.
 }
 
 export type Session<T> = {
@@ -35,7 +41,7 @@ export type Session<T> = {
 	-- Use these when you need to modify a session of a user that may not be in this server
 	-- Atomically adds a value to a key in the session
 	-- key is / separated and starts with a key in the profile, e.g. "Settings/Volume"
-	AtomicSet: <T, U>(self: Session<T>, key: string, value: U, transactionSchema: U?) -> Promise.TypedPromise<boolean>,
+	AtomicSet: <T, U>(self: Session<T>, key: string, value: any) -> Promise.TypedPromise<boolean>,
 	-- Atomically removes a key
 	AtomicRemove: (self: Session<T>, key: string) -> Promise.TypedPromise<boolean>,
 }
@@ -54,6 +60,11 @@ export type KeyOptions<T> = {
 	AutosaveInterval: number?, -- [5] (minutes) Automatically saves the data at this interval if the key is loaded and has unsaved changes. Set to 0 to disable autosave.
 	Compression: CompressionSettings?,
 	TransformationFile: string?, -- The name of a file in the Transformations folder that defines data transformations for this key for version migration.
+	Multislot: boolean?, -- [false], if true, this key will have multiple slots allowing for different save files.
+	-- This works by loading the session with the slot argument. A profile with multislot enabled does not require
+	-- all keys to be multislot.
+	-- Keys that are not multislot will be shared across all slots.
+	-- They are also saved in slot 1, incase you want to enable multislot later.
 }
 
 export type Key<T> = {

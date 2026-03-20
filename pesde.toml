@@ -23,7 +23,7 @@ sourcemap_generator = ".pesde/scripts/sourcemap_generator.luau"
 
 [dev_dependencies]
 scripts = { name = "pesde/scripts_rojo", version = "^0.2.0", target = "lune" }
-rojo = { name = "pesde/rojo", version = "^7.7.0-rc.1", target = "lune" }
+rojo = { name = "pesde/rojo", version = "^7.6.0", target = "lune" }
 
 [engines]
 pesde = "^0.7.0"
@@ -32,3 +32,4 @@ lune = "^0.10.2"
 [dependencies]
 Pack = { name = "isoopod/pack", version = "^0.11.0" }
 Promise = { wally = "howmanysmall/typed-promise", version = "^4.0.6" }
+Signal = { wally = "data-oriented-house/lemonsignal", version = "^1.11.0" }

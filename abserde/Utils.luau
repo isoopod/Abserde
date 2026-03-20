@@ -9,6 +9,15 @@ local utils = {}
 
 -- stylua: ignore
 utils.PROJECT = assert(ServerScriptService:FindFirstChild("abserde_project"), "No abserde_project found in ServerScriptService, create one with `abserde init`.") :: types.AbserdeProject
+utils.TOMBSTONE_METATABLE = {
+	__index = function(_, k)
+		error(`Attempted to read key '{k}' from a destroyed Key object`, 2)
+	end,
+	__newindex = function(_, k)
+		error(`Attempted to write key '{k}' to a destroyed Key object`, 2)
+	end,
+	__metatable = "AbserdeTombstone",
+}
 
 local function deepClone<T>(tbl: T): T
 	if type(tbl) ~= "table" then return tbl end

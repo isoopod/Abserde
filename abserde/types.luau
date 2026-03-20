@@ -1,5 +1,6 @@
 local Pack = require(script.Parent.roblox_packages.Pack)
 local Promise = require(script.Parent.roblox_packages.Promise)
+local Signal = require(script.Parent.roblox_packages.Signal)
 
 export type Profile<T> = {
 	ClassName: "AbserdeProfile",
@@ -13,6 +14,7 @@ export type Profile<T> = {
 	-- This read only session will not automatically closed if opened with a player object.
 	-- Will open a separate, read only session even if there is already a writable session for the same user and slot.
 	-- A read only session cannot be found with Find, and will not be cached.
+	-- Additionally, this will not automatically open keys that would be otherwise.
 }
 
 export type ProfileOptions<T> = {
@@ -24,15 +26,17 @@ export type ProfileOptions<T> = {
 
 export type Session<T> = {
 	ClassName: "AbserdeSession",
-	Data: T,
-	-- Will be true if the session has been locked by another server
-	Locked: boolean,
-	-- Saves data and closes the session, removing the lock and removing it from memory
-	-- Only works if the session is not locked by another server
-	Release: (self: Session<T>) -> Promise.Promise,
+	Profile: string, -- Name of the profile
+	User: number, -- Userid
+	Keys: T,
+	Open: boolean,
+	Closing: Signal.Signal<>,
 	-- Manually saves all keys in the session (that have been modified)
 	-- Only works if the session is not locked by another server
 	Save: (self: Session<T>) -> Promise.Promise,
+	-- Releases any locked keys, without saving or closing the session.
+	-- Keys may reobtain a lock automatically if the session remains open.
+	Release: (self: Session<T>) -> Promise.Promise,
 	-- Saves and releases (if possible), and removes the session from memory.
 	-- This happens automatically when a player leaves if their session was created from the Player object instead of their UserId.
 	Close: (self: Session<T>) -> Promise.Promise,

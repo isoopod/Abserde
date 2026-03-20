@@ -14,7 +14,7 @@ local PROJECT = Utils.PROJECT
 local Key = {}
 local KeyClass = { metatable = { __index = Key } }
 
-type _Key<T> = types.Key<T> & {
+export type _Key<T> = types.Key<T> & {
 	_loading: boolean,
 	_readOnly: boolean,
 	_dirty: boolean, -- Do we have unsaved changes?
@@ -31,6 +31,7 @@ type _Key<T> = types.Key<T> & {
 	_Save: (self: _Key<T>) -> Promise.Promise,
 	_Load: (self: _Key<T>) -> Promise.TypedPromise<T?>,
 	_EnsureLoaded: (self: _Key<T>) -> (),
+	_Destroy: (self: _Key<T>) -> (),
 }
 
 Key.ClassName = "Key"
@@ -79,6 +80,17 @@ function Key._Unlock<T>(self: _Key<T>): Promise.Promise
 	end)
 end
 
+local MAX_RETRIES = 5
+local BACKOFF_TIME = 5
+
+local function isErrorRecoverable(error: string)
+	local e = string.lower(error)
+	return string.find(e, "throttled")
+		or string.find(e, "corrupted") -- 501
+		or string.find(e, "rejected the request with error") -- 502
+		or string.find(e, "successful but") -- 503 / 504
+end
+
 function Key._Save<T>(self: _Key<T>): Promise.Promise
 	if not self._dirty or self._readOnly or (self.Options.Lockable and self.Locked) then return Promise.resolve() end
 
@@ -101,7 +113,14 @@ function Key._Save<T>(self: _Key<T>): Promise.Promise
 			CompressionAlgorithm = if self._options.Compression then self._options.Compression.algorithm.Name else nil,
 		}
 
-		success, err = pcall(self._datastore.SetAsync, self._datastore, tostring(self._user), dataToSave, metadata)
+		local setOptions = Instance.new("DataStoreSetOptions")
+		setOptions:SetMetadata(metadata)
+
+		for attempt = 1, MAX_RETRIES do
+			success, err = pcall(self._datastore.SetAsync, self._datastore, tostring(self._user), dataToSave, { self._user }, setOptions)
+			if success or not isErrorRecoverable(err) then break end
+			if attempt < MAX_RETRIES then task.wait(BACKOFF_TIME * 2 ^ attempt * (0.5 + math.random() * 0.5)) end
+		end
 		if not success then return reject(`Datastore SetAsync failed for key {self._datastore.Name} for user {self._user}: {err}`) end
 
 		self._dirty = false
@@ -209,6 +228,28 @@ function Key._EnsureLoaded<T>(self: _Key<T>)
 	self.Loaded = true
 end
 
+function Key._Destroy<T>(self: _Key<T> & { [any]: any })
+	if getmetatable(self :: any) == "AbserdeTombstone" then return end
+
+	local function deepClear(t: { [any]: any })
+		for _, v in t do
+			if type(v) == "table" then deepClear(t) end
+		end
+		table.clear(t)
+		setmetatable(t, Utils.TOMBSTONE_METATABLE)
+		table.freeze(t)
+	end
+
+	if self._data then
+		deepClear(self._data)
+		self._data = nil
+	end
+
+	table.clear(self)
+	setmetatable(self, Utils.TOMBSTONE_METATABLE)
+	table.freeze(self :: any)
+end
+
 function KeyClass.new<T>(options: types.KeyOptions<T>, datastore: DataStore, user: number, load: boolean?, readOnly: boolean?): types.Key<T>
 	local self: _Key<T> = setmetatable({}, KeyClass.metatable) :: _Key<T>
 
@@ -254,7 +295,7 @@ function KeyClass.new<T>(options: types.KeyOptions<T>, datastore: DataStore, use
 					self._dirty = true
 				end
 			end,
-			__pairs = function()
+			__iter = function()
 				self:_EnsureLoaded()
 
 				local targetTbl = if path == "" then self._data else tbl

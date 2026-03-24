@@ -4,7 +4,9 @@
 local DataStoreService = game:GetService("DataStoreService")
 local TestService = game:GetService("TestService")
 -- Modules
+local Courier = require(script.Parent.Courier)
 local Key = require(script.Parent.Key)
+local Pack = require(script.Parent.roblox_packages.Pack)
 local Promise = require(script.Parent.roblox_packages.Promise)
 local Utils = require(script.Parent.Utils)
 local types = require(script.Parent.types)
@@ -74,9 +76,9 @@ function AbserdeSession.Close<T>(self: types.Session<T>)
 	return Promise.new(function(resolve)
 		local success, err
 		success, err = self:Save():await()
-		if not success then TestService:Error(`[Abserde]: Error saving profile {self.Profile}<{self.User}> while closing: {err}`) end
+		if not success then TestService:Error(`[Abserde]: Error saving profile {self.Profile.Name}<{self.User}> while closing: {err}`) end
 		success, err = self:Release():await()
-		if not success then TestService:Error(`[Abserde]: Error releasing profile {self.Profile}<{self.User}> while closing: {err}`) end
+		if not success then TestService:Error(`[Abserde]: Error releasing profile {self.Profile.Name}<{self.User}> while closing: {err}`) end
 
 		self.Closing:Fire()
 		self.Closing:Destroy()
@@ -93,11 +95,32 @@ function AbserdeSession.Close<T>(self: types.Session<T>)
 	end)
 end
 
+function AbserdeSession.AtomicSet<T>(self: types.Session<T>, key: string, value: any)
+	return Promise.new(function(resolve, reject)
+		-- If a session is already open or we can open one right now, use that
+
+		-- If a session is already open in another server, send a message through Courier
+		-- TODO: Get lock JobId, send message and wait for completion
+		-- Resolve the subschema for the value so we can encode it for transmission
+		local keyPath: string, path: string = (string.match :: any)(key, "([^/]+)/?(.*)")
+		local sKey = (self.Profile.Keys :: { [string]: types.KeyOptions<unknown> })[keyPath]
+		local schema = sKey.Schema.schema
+		local subSchema = Pack:Reflect(schema, path)
+		-- Attempt to encode the value using the reflected subschema
+		if not subSchema then return reject(`[Abserde]: Could not resolve the subschema for {key}. Check reflection limitations`) end
+		local s, encoded = pcall(subSchema.Write, subSchema, value)
+		if not s then return reject(`[Abserde]: Error encoding value {value} for subschema {key}: {encoded}`) end
+		-- Message the existing server to update the value.
+
+		-- Modify the value in this read only session
+	end)
+end
+
 function AbserdeSessionClass.new<T>(profile: types.ProfileOptions<T>, userid: number, slot: number, readOnly: boolean?): types.Session<T>
 	assert(#profile.Name <= 24, "Profile names cannot exceed 24 characters")
 	local self: _AbserdeSession<T> = setmetatable({}, AbserdeSessionClass.metatable) :: any
 
-	self.Profile = profile.Name
+	self.Profile = profile
 	self.User = userid
 
 	local keys = {}

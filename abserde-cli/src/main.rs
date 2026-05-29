@@ -2,6 +2,9 @@ mod cli;
 mod commands;
 
 fn main() -> anyhow::Result<()> {
-    let cli = cli::parse();
-    commands::dispatch(cli)
+    if let Err(e) = cli::run() {
+        eprintln!("{e:?}");
+        std::process::exit(1);
+    }
+    Ok(())
 }

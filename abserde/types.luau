@@ -99,13 +99,20 @@ export type user = Player | number
 export type Abserde = {}
 
 type instNode<T, V> = V & T
-export type AbserdeProject = instNode<Folder, {
-	Schemas: instNode<Folder, {
-		Snapshots: instNode<Folder, { [string]: { [string]: ModuleScript } }>,
-		[string]: ModuleScript,
-	}>,
-	Profiles: instNode<Folder, { [string]: ModuleScript }>,
-	Transformations: instNode<Folder, { [string]: ModuleScript }>,
-}>
+export type AbserdeProject = instNode<
+	Folder,
+	{
+		Schemas: instNode<
+			Folder,
+			{
+				-- [SchemaName] -> { [Version] -> Snapshot }
+				Snapshots: instNode<Folder, { [string]: { [string]: ModuleScript } }>,
+				[string]: ModuleScript,
+			}
+		>,
+		Profiles: instNode<Folder, { [string]: ModuleScript }>,
+		Transformations: instNode<Folder, { [string]: ModuleScript }>,
+	}
+>
 
 return nil

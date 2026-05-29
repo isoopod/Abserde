@@ -1,4 +1,15 @@
-use std::{ fs, io::Write, path::Path };
+use anyhow::Context;
+use clap::Args;
+use std::{fs, io::Write, path::Path};
+
+#[derive(Args)]
+pub struct InitArgs {
+    /// Path to the source directory.
+    ///
+    /// Should be relative to the current working directory.
+    #[arg(short, long, default_value = ".")]
+    pub path: String,
+}
 
 enum TemplateNode {
     File {
@@ -11,48 +22,72 @@ enum TemplateNode {
     },
 }
 
-fn template_tree() -> TemplateNode {
-    TemplateNode::Dir {
-        name: "abserde_project",
-        children: &[
-            TemplateNode::Dir {
-                name: "Schemas",
-                children: &[
-                    TemplateNode::Dir {
-                        name: "Snapshots",
-                        children: &[],
-                    },
-                    // Add an example schema file here
-                ],
-            },
-            TemplateNode::Dir {
-                name: "Profiles",
-                children: &(
-                    [
-                        // Add an example profile file here
-                    ]
-                ),
-            },
-            TemplateNode::Dir {
-                name: "Transformations",
-                children: &(
-                    [
-                        // Add an example transformation file here
-                    ]
-                ),
-            },
-            // Add a TransactionSchemas file for Atomic Adds
-        ],
-    }
+macro_rules! tree {
+    (file $name:literal => $content:expr) => {
+        TemplateNode::File { name: $name, content: $content }
+    };
+
+    (dir $name:literal { $($body:tt)* }) => {
+        TemplateNode::Dir {
+            name: $name,
+            children: tree!(@children [] $($body)*),
+        }
+    };
+
+    // Internal accumulator arms
+    // Base case: no more tokens, emit the collected slice
+    (@children [$($acc:expr),*]) => {
+        &[$($acc),*]
+    };
+    // Consume a dir entry: the {} block makes the boundary unambiguous
+    (@children [$($acc:expr),*] dir $name:literal { $($body:tt)* } $($rest:tt)*) => {
+        tree!(@children [$($acc,)* tree!(dir $name { $($body)* })] $($rest)*)
+    };
+    // Consume a file entry: requires a trailing comma to resolve expr ambiguity
+    (@children [$($acc:expr),*] file $name:literal => $content:expr, $($rest:tt)*) => {
+        tree!(@children [$($acc,)* tree!(file $name => $content)] $($rest)*)
+    };
+    // Consume a file entry: last item, no trailing comma
+    (@children [$($acc:expr),*] file $name:literal => $content:expr) => {
+        tree!(@children [$($acc,)* tree!(file $name => $content)])
+    };
 }
 
-fn create_dir(path: &Path) -> anyhow::Result<()> {
-    fs::create_dir_all(path)?;
+const PROJECT_TEMPLATE: TemplateNode = tree! {
+    dir "abserde_project" {
+        dir "Schemas" {
+            dir "Snapshots" {}
+            file "ExampleSchema.luau" => include_str!("templates/schema.luau")
+        }
+        dir "Profiles" {
+            file "ExampleProfile.luau" => include_str!("templates/profile.luau")
+        }
+        dir "Transforms" {
+            file "ExampleTransform.luau" => include_str!("templates/transform.luau")
+        }
+        file "TransformSchemas.luau" => include_str!("templates/TransformSchemas.luau")
+    }
+};
+
+pub fn create_dir(path: &Path) -> anyhow::Result<()> {
+    fs::create_dir_all(path)
+        .with_context(|| format!("Failed to create directory: {}", path.display()))?;
     Ok(())
 }
 
-fn write_file(path: &Path, content: &str) -> anyhow::Result<()> {
-    let mut file = fs::OpenOptions::new().write(true).create(false).create_new(true).open(path)?;
+pub fn write_file(path: &Path, content: &str) -> anyhow::Result<()> {
+    let mut file = match fs::OpenOptions::new()
+        .write(true)
+        .create_new(true)
+        .open(path)
+    {
+        Ok(f) => f,
+        Err(e) if e.kind() == std::io::ErrorKind::AlreadyExists => return Ok(()),
+        Err(e) => {
+            return Err(e)
+                .with_context(|| format!("Failed to open file for writing: {}", path.display()));
+        }
+    };
 
     file.write_all(content.as_bytes())?;
     Ok(())
@@ -75,8 +110,24 @@ fn write_node(base: &Path, node: &TemplateNode) -> anyhow::Result<()> {
     Ok(())
 }
 
-pub fn run() -> anyhow::Result<()> {
+pub fn run(args: InitArgs) -> anyhow::Result<()> {
     let cwd = std::env::current_dir()?;
-    write_node(&cwd, &template_tree())?;
+    let path = cwd.join(args.path);
+
+    write_node(&path, &PROJECT_TEMPLATE)?;
+
+    // Create the .abserde folder and save where the template was written to
+    let abserde_dir = cwd.join(".abserde");
+    create_dir(&abserde_dir)?;
+
+    let relative = path.strip_prefix(&cwd).unwrap_or(&path);
+    fs::write(
+        &abserde_dir.join("project_path"),
+        relative
+            .join("abserde_project")
+            .to_str()
+            .ok_or_else(|| anyhow::anyhow!("Project path contains invalid UTF-8"))?,
+    )?;
+
     Ok(())
 }

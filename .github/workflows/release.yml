@@ -11,7 +11,7 @@ permissions:
 jobs:
   # Upload the CLI binaries
   build-cli:
-    name: Build CLI (${{ matrix.os }})
+    name: Build CLI (${{ matrix.os-name }}-${{ matrix.arch }})
     runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
@@ -54,6 +54,13 @@ jobs:
           sed -i.bak "s/^version = .*/version = \"${{ env.VERSION }}\"/" abserde-cli/Cargo.toml
         shell: bash
 
+      # Install cross-compilation tools for Linux Aarch64 if needed
+      - name: Install ARM target tools
+        if: matrix.target == 'aarch64-unknown-linux-gnu'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y gcc-aarch64-linux-gnu
+
       - name: Install rust
         uses: dtolnay/rust-toolchain@stable
         with:
@@ -64,26 +71,26 @@ jobs:
           workspaces: "abserde-cli"
 
       - name: Build binary
-        run: cargo build --release --target ${{ matrix.target }}
+        run: cargo build --release --target ${{ matrix.target }} -p abserde
         working-directory: abserde-cli
 
       - name: Package artifact (Unix)
         if: matrix.os != 'windows-latest'
         run: |
-          cd abserde-cli/target/${{ matrix.target}}/release
+          cd target/${{ matrix.target}}/release
           zip -j ../../../abserde-${{ env.VERSION }}-${{ matrix.os-name }}-${{ matrix.arch }}.zip abserde
 
       - name: Package artifact (Windows)
         if: matrix.os == 'windows-latest'
         run: |
-          cd abserde-cli/target/${{ matrix.target }}/release
+          cd target/${{ matrix.target }}/release
           7z a ../../../abserde-${{ env.VERSION }}-${{ matrix.os-name }}-${{ matrix.arch }}.zip abserde.exe
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
           name: cli-${{ matrix.os-name }}-${{ matrix.arch }}
-          path: abserde-cli-*.zip
+          path: abserde-*.zip
   # TODO: Build and upload the library
   # Publish
   publish:

@@ -8,13 +8,16 @@ export type Profile<T> = {
 	Options: ProfileOptions<T>,
 
 	-- Slot must be provided if the profile has multislot enabled.
-	Open: <T>(self: Profile<T>, user: user, slot: number?) -> Promise.TypedPromise<Session<T>>, -- Finds or opens a session for the given user and slot.
-	Find: <T>(self: Profile<T>, user: user, slot: number?) -> Session<T>?, -- Immediately fetches an existing session if there is one. Will not open a session.
-	OpenLocked: <T>(self: Profile<T>, user: user, slot: number?) -> Promise.TypedPromise<Session<T>>, -- Opens a read only session (still supports atomic operations).
+	-- Finds or opens a session for the given user and slot.
+	Open: <T>(self: Profile<T>, user: user, slot: number?) -> Promise.TypedPromise<Session<T>>,
+	-- Immediately fetches an existing session if there is one. Will not open a session.
+	Find: <T>(self: Profile<T>, user: user, slot: number?) -> Session<T>?,
+	-- Opens a read only session (still supports atomic operations).
 	-- This read only session will not automatically closed if opened with a player object.
 	-- Will open a separate, read only session even if there is already a writable session for the same user and slot.
 	-- A read only session cannot be found with Find, and will not be cached.
 	-- Additionally, this will not automatically open keys that would be otherwise.
+	OpenLocked: <T>(self: Profile<T>, user: user, slot: number?) -> Promise.TypedPromise<Session<T>>,
 }
 
 export type ProfileOptions<T> = {

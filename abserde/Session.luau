@@ -97,13 +97,14 @@ end
 
 function AbserdeSession.AtomicSet<T>(self: types.Session<T>, key: string, value: any)
 	return Promise.new(function(resolve, reject)
+		local keyPath: string, path: string = (string.match :: any)(key, "([^/]+)/?(.*)")
+		local sKey = assert((self.Profile.Keys :: { [string]: types.KeyOptions<unknown> })[keyPath], `Unable to find session key {keyPath}`)
+
 		-- If a session is already open or we can open one right now, use that
 
 		-- If a session is already open in another server, send a message through Courier
 		-- TODO: Get lock JobId, send message and wait for completion
 		-- Resolve the subschema for the value so we can encode it for transmission
-		local keyPath: string, path: string = (string.match :: any)(key, "([^/]+)/?(.*)")
-		local sKey = (self.Profile.Keys :: { [string]: types.KeyOptions<unknown> })[keyPath]
 		local schema = sKey.Schema.schema
 		local subSchema = Pack:Reflect(schema, path)
 		-- Attempt to encode the value using the reflected subschema

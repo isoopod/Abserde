@@ -65,7 +65,6 @@ const PROJECT_TEMPLATE: TemplateNode = tree! {
         dir "Transforms" {
             file "ExampleTransform.luau" => include_str!("templates/transform.luau")
         }
-        file "TransformSchemas.luau" => include_str!("templates/TransformSchemas.luau")
     }
 };
 

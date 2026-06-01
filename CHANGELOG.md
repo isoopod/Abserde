@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.0] - 2026-06-01
+
 ### Added
 
 - Initial release
+
+[unreleased]: https://github.com/isoopod/Abserde/compare/v0.1.0...HEAD
+[0.1.0]: https://github.com/isoopod/Abserde/compare/ccef27aeeb78d90b375468d20e655f648c1ed8a6...v0.1.0

@@ -1,0 +1,31 @@
+{
+  "name": "abserde",
+  "tree": {
+    "$className": "DataModel",
+    "ReplicatedStorage": {
+      "Abserde": {
+        "$path": "abserde",
+        "roblox_packages": {
+          "$path": "roblox_packages"
+        }
+      }
+    },
+    "ServerScriptService": {
+      "abserde_project": {
+        "$className": "Folder",
+        "Schemas": {
+          "$className": "Folder",
+          "ExampleSchema": {
+            "$path": "abserde-cli/src/commands/templates/schema.luau"
+          }
+        },
+        "Profiles": {
+          "$className": "Folder",
+          "ExampleProfile": {
+            "$path": "abserde-cli/src/commands/templates/profile.luau"
+          }
+        }
+      }
+    }
+  }
+}

@@ -42,7 +42,7 @@ jobs:
             os-name: windows
             arch: aarch64
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 
       - name: Get version from tag
         id: get_version
@@ -93,13 +93,81 @@ jobs:
           name: cli-${{ matrix.os-name }}-${{ matrix.arch }}
           path: abserde-*.zip
   # TODO: Build and upload the library
+  build-lib:
+    name: Build library
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Setup RoKit
+        uses: CompeyDev/setup-rokit@v0.1.2
+
+      - name: Setup Pesde
+        uses: ewd3v/setup-pesde@v0.1.1
+        with:
+          pesde_token: "${{ github.token }}"
+
+      - name: Build
+        run: rojo build default.project.json -o Abserde.rbxm
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: Abserde
+          path: Abserde.rbxm
   # Publish
   publish:
     name: Publish
-    needs: [build-cli]
+    needs: [build-cli, build-lib]
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
+        with:
+          ref: main
+
+      - name: Extract version from tag
+        id: get_version
+        run: |
+          tag=${{ github.ref_name }}
+          echo "version=${tag#"v"}" >> "$GITHUB_OUTPUT"
+
+      - name: Update changelog
+        uses: thomaseizinger/keep-a-changelog-new-release@v3
+        with:
+          tag: ${{ github.ref_name }}
+
+      - name: Bump pesde.toml version
+        uses: DervexDev/file-version-bumper@v1
+        with:
+          path: ./pesde.toml
+          version: ${{ steps.get_version.outputs.version }}
+
+      - name: Bump Cargo.toml version
+        run: |
+          sed -i.bak "s/^version = .*/version = \"${{ steps.get_version.outputs.version }}\"/" abserde-cli/Cargo.toml
+        shell: bash
+
+      - name: Commit and push changes
+        uses: EndBug/add-and-commit@v9
+        with:
+          message: "release: ${{ github.ref_name }}"
+          default_author: github_actions
+          tag: ${{ github.ref_name }} --force
+          tag_push: --force
+
+      - name: Setup pesde
+        uses: ewd3v/setup-pesde@v0.1.1
+        with:
+          pesde_token: "${{ secrets.PESDE_TOKEN || github.token }}"
+
+      - name: Publish to Pesde
+        run: pesde publish -y
+
+      - name: Read changelog
+        id: read_changelog
+        uses: mindsers/changelog-reader-action@v2
+        with:
+          version: ${{ steps.get_version.outputs.version }}
 
       - name: Download all artifacts
         uses: actions/download-artifact@v4
@@ -115,6 +183,10 @@ jobs:
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:
+          body: |
+            # Changelog
+            ${{ steps.read_changelog.outputs.changes }}
+
           files: |
             assets/*
           generate_release_notes: true

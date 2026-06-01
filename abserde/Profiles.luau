@@ -71,7 +71,7 @@ function AbserdeProfile.OpenLocked<T>(self: _AbserdeProfile<T>, user: types.user
 	end)
 end
 
-function AbserdeProfileClass.new<T>(file: ModuleScript, options: types.ProfileOptions<T>): types.Profile<T>
+function AbserdeProfileClass.new<T>(options: types.ProfileOptions<T>): types.Profile<T>
 	local self: _AbserdeProfile<T> = setmetatable({}, AbserdeProfileClass.metatable) :: any
 
 	self._sessions = {}
@@ -79,7 +79,7 @@ function AbserdeProfileClass.new<T>(file: ModuleScript, options: types.ProfileOp
 		self._sessions[i] = {}
 	end
 
-	self.Name = file.Name
+	self.Name = options.Name
 	self.Options = options
 
 	-- Ensure the server remains open until all open sessions are closed

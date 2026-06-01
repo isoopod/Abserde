@@ -9,15 +9,15 @@ export type Profile<T> = {
 
 	-- Slot must be provided if the profile has multislot enabled.
 	-- Finds or opens a session for the given user and slot.
-	Open: <T>(self: Profile<T>, user: user, slot: number?) -> Promise.TypedPromise<Session<T>>,
+	Open: (self: Profile<T>, user: user, slot: number?) -> Promise.TypedPromise<Session<T>>,
 	-- Immediately fetches an existing session if there is one. Will not open a session.
-	Find: <T>(self: Profile<T>, user: user, slot: number?) -> Session<T>?,
+	Find: (self: Profile<T>, user: user, slot: number?) -> Session<T>?,
 	-- Opens a read only session (still supports atomic operations).
 	-- This read only session will not automatically closed if opened with a player object.
 	-- Will open a separate, read only session even if there is already a writable session for the same user and slot.
 	-- A read only session cannot be found with Find, and will not be cached.
 	-- Additionally, this will not automatically open keys that would be otherwise.
-	OpenLocked: <T>(self: Profile<T>, user: user, slot: number?) -> Promise.TypedPromise<Session<T>>,
+	OpenLocked: (self: Profile<T>, user: user, slot: number?) -> Promise.TypedPromise<Session<T>>,
 }
 
 export type ProfileOptions<T> = {
@@ -51,9 +51,9 @@ export type Session<T> = {
 	-- Limitation: The value being modified cannot exceed 32KiB.
 	-- The value is encoded with the relevant sub-schema of the key schema.
 	-- Will modify the value in the read only session once the transaction is confirmed.
-	AtomicSet: <T, U>(self: Session<T>, key: string, value: any) -> Promise.TypedPromise<boolean>,
+	AtomicSet: (self: Session<T>, key: string, value: any) -> Promise.TypedPromise<boolean>,
 	-- Fetches the latest for an existing session.
-	Refresh: <T>(self: Session<T>) -> Promise.Promise,
+	Refresh: (self: Session<T>) -> Promise.Promise,
 }
 
 export type CompressionSettings = {

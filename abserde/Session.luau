@@ -96,6 +96,7 @@ function AbserdeSession.Close<T>(self: types.Session<T>)
 end
 
 function AbserdeSession.AtomicSet<T>(self: types.Session<T>, key: string, value: any)
+	warn("[Abserde]: AtomicSet is not yet implemented. This method will be fleshed out in a future update.")
 	return Promise.new(function(resolve, reject)
 		local keyPath: string, path: string = (string.match :: any)(key, "([^/]+)/?(.*)")
 		local sKey = assert((self.Profile.Keys :: { [string]: types.KeyOptions<unknown> })[keyPath], `Unable to find session key {keyPath}`)
@@ -115,6 +116,11 @@ function AbserdeSession.AtomicSet<T>(self: types.Session<T>, key: string, value:
 
 		-- Modify the value in this read only session
 	end)
+end
+
+function AbserdeSession.Refresh<T>(self: types.Session<T>)
+	warn("[Abserde]: Refresh is not yet implemented. This method will be fleshed out in a future update.")
+	return Promise.resolve()
 end
 
 function AbserdeSessionClass.new<T>(profile: types.ProfileOptions<T>, userid: number, slot: number, readOnly: boolean?): types.Session<T>

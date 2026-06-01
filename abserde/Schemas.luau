@@ -27,7 +27,11 @@ end
 
 -- Creates a schema, used inside Schema files
 -- `file` should just be `script`
-function Schemas.Schema<T, U>(file: ModuleScript, format: U, encode: ((T) -> U)?, decode: ((U) -> T)?): types._AbserdeSchema<T>
+type SchemaConstructor =
+	(<T>(file: ModuleScript, format: T) -> types._AbserdeSchema<T>)
+	& (<T, U>(file: ModuleScript, format: U, encode: (T) -> U, decode: (U) -> T) -> types._AbserdeSchema<T>)
+
+local SchemaImpl: SchemaConstructor = function(file, format, encode, decode)
 	local schema = Pack:Define(Pack.Transformer(Pack.Struct(format), encode, decode))
 
 	local schemaName = file.Name
@@ -45,7 +49,9 @@ function Schemas.Schema<T, U>(file: ModuleScript, format: U, encode: ((T) -> U)?
 		name = schemaName,
 		version = version :: number,
 	}
-end
+end :: SchemaConstructor
+
+Schemas.Schema = SchemaImpl
 
 local function requireSchema(module: ModuleScript): types._AbserdeSchema<any>
 	local s, schema = pcall(require, module)

@@ -72,7 +72,8 @@ jobs:
 
       - name: Build binary
         run: cargo build --release --target ${{ matrix.target }} -p abserde
-        working-directory: abserde-cli
+        env:
+          CARGO_TARGET_AARCH64_UNKNOWN_LINUX_GNU_LINKER: aarch64-linux-gnu-gcc
 
       - name: Package artifact (Unix)
         if: matrix.os != 'windows-latest'

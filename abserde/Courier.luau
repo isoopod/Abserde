@@ -5,7 +5,7 @@ local HttpService = game:GetService("HttpService")
 local MemoryStoreService = game:GetService("MemoryStoreService")
 local MessagingService = game:GetService("MessagingService")
 -- Modules
-local Promise = require(script.Parent.roblox_packages.Promise)
+local Promise = require(script.Parent.Parent.roblox_packages.Promise)
 
 local DATA_EXPIRY = 60
 local RETRY_INTERVAL = 5

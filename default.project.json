@@ -1,7 +1,10 @@
 {
   "name": "abserde",
   "tree": {
-    "$path": "abserde",
+    "$className": "Folder",
+    "Abserde": {
+      "$path": "abserde"
+    },
     "roblox_packages": {
       "$path": "roblox_packages"
     }

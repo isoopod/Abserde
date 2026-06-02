@@ -4,7 +4,7 @@
 local EncodingService = game:GetService("EncodingService")
 local MemoryStoreService = game:GetService("MemoryStoreService")
 -- Modules
-local Promise = require(script.Parent.roblox_packages.Promise)
+local Promise = require(script.Parent.Parent.roblox_packages.Promise)
 local Schemas = require(script.Parent.Schemas)
 local Utils = require(script.Parent.Utils)
 local types = require(script.Parent.types)

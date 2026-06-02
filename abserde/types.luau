@@ -1,6 +1,6 @@
-local Pack = require(script.Parent.roblox_packages.Pack)
-local Promise = require(script.Parent.roblox_packages.Promise)
-local Signal = require(script.Parent.roblox_packages.Signal)
+local Pack = require(script.Parent.Parent.roblox_packages.Pack)
+local Promise = require(script.Parent.Parent.roblox_packages.Promise)
+local Signal = require(script.Parent.Parent.roblox_packages.Signal)
 
 export type Profile<T> = {
 	ClassName: "AbserdeProfile",

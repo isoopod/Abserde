@@ -1,7 +1,7 @@
 --!optimize 2
 
 -- Modules
-local Pack = require(script.Parent.roblox_packages.Pack)
+local Pack = require(script.Parent.Parent.roblox_packages.Pack)
 local Utils = require(script.Parent.Utils)
 local types = require(script.Parent.types)
 

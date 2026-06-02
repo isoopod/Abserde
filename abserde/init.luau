@@ -1,7 +1,7 @@
 --!strict
 
 -- Modules
-local Pack = require(script.roblox_packages.Pack)
+local Pack = require(script.Parent.roblox_packages.Pack)
 local Profiles = require(script.Profiles)
 local Schemas = require(script.Schemas)
 local types = require(script.types)

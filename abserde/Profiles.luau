@@ -3,7 +3,7 @@
 -- Services
 local Players = game:GetService("Players")
 -- Modules
-local Promise = require(script.Parent.roblox_packages.Promise)
+local Promise = require(script.Parent.Parent.roblox_packages.Promise)
 local Session = require(script.Parent.Session)
 local types = require(script.Parent.types)
 

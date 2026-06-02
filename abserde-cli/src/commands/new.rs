@@ -4,6 +4,7 @@ use clap::{Args, ValueEnum};
 use crate::commands::{
     get_project_path,
     init::{create_dir, write_file},
+    update,
 };
 
 #[derive(Args)]
@@ -16,7 +17,7 @@ pub struct NewArgs {
     pub name: String,
 }
 
-#[derive(ValueEnum, Clone)]
+#[derive(ValueEnum, Clone, PartialEq)]
 pub enum ArtefactKind {
     Schema,
     Profile,
@@ -55,5 +56,12 @@ pub fn run(args: NewArgs) -> Result<()> {
         .with_context(|| format!("Failed to create artefact: {}", file_path.display()))?;
 
     println!("Created {} at {}", args.name, file_path.display());
+
+    if args.kind == ArtefactKind::Schema {
+        // Run an update so we initialize the hash for the new schema
+        println!("Running update to initialize schema hash...");
+        update::run()?;
+    }
+
     Ok(())
 }

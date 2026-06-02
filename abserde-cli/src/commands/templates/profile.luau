@@ -3,7 +3,7 @@
 -- Services
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 -- Modules
-local Abserde = require(ReplicatedStorage.Abserde)
+local Abserde = require(ReplicatedStorage.Packages.Abserde)
 
 -- Require all schemas used by the profile here.
 -- Do not require them inside the return constructor, or you may experience type issues.

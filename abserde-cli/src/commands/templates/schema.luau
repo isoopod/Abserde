@@ -3,7 +3,7 @@
 -- Services
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 -- Modules
-local Abserde = require(ReplicatedStorage.Abserde)
+local Abserde = require(ReplicatedStorage.Packages.Abserde)
 local Pack = Abserde.Pack
 
 -- NOTE: The internal datatype of an Abserde Schema is a Pack Transform<Dictionary<{ ... }>>

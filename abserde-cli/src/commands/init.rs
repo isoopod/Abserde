@@ -128,5 +128,9 @@ pub fn run(args: InitArgs) -> anyhow::Result<()> {
             .ok_or_else(|| anyhow::anyhow!("Project path contains invalid UTF-8"))?,
     )?;
 
+    println!("Initialized new Abserde project at {}", path.display());
+    println!("Rename the ExampleSchema and run `abserde update` before modifying it.");
+    println!("Or remove it and use `abserde new schema --name ...` to create a new one.");
+
     Ok(())
 }

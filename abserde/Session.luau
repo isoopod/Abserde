@@ -8,6 +8,7 @@ local Courier = require(script.Parent.Courier)
 local Key = require(script.Parent.Key)
 local Pack = require(script.Parent.Parent.roblox_packages.Pack)
 local Promise = require(script.Parent.Parent.roblox_packages.Promise)
+local Signal = require(script.Parent.Parent.roblox_packages.Signal)
 local Utils = require(script.Parent.Utils)
 local types = require(script.Parent.types)
 
@@ -145,6 +146,8 @@ function AbserdeSessionClass.new<T>(profile: types.ProfileOptions<T>, userid: nu
 
 	self.Keys = table.freeze(keys)
 	self.Open = true
+
+	self.Closing = Signal.new()
 
 	return self
 end

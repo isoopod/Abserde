@@ -2,5 +2,7 @@
   "luau-lsp.fflags.enableNewSolver": true,
   "luau-lsp.fflags.enableByDefault": true,
   "stylua.targetReleaseVersion": "latest",
-  "luau-lsp.sourcemap.rojoProjectFile": "dev.project.json"
+  "luau-lsp.sourcemap.rojoProjectFile": "dev.project.json",
+  "luau-lsp.completion.imports.useConst": false,
+  "luau-lsp.completion.imports.requireStyle": "alwaysRelative"
 }

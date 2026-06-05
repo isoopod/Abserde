@@ -91,7 +91,6 @@ function AbserdeSession.Close<T>(self: types.Session<T>)
 		table.clear(self)
 		self.Open = false
 		setmetatable(self, Utils.TOMBSTONE_METATABLE)
-		table.freeze(self)
 		resolve()
 	end)
 end

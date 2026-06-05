@@ -261,6 +261,8 @@ function KeyClass.new<T>(options: types.KeyOptions<T>, datastore: DataStore, use
 	self._dirty = false
 	self._lastSaved = time()
 
+	self.Options = options
+
 	if load then self:Load() end
 
 	local proxyCache = setmetatable({}, { __mode = "k" })
@@ -310,7 +312,6 @@ function KeyClass.new<T>(options: types.KeyOptions<T>, datastore: DataStore, use
 		return proxy
 	end
 
-	self.Options = options
 	self.Loaded = not not load
 	self.Data = createProxy({}, "")
 

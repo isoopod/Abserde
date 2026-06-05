@@ -237,7 +237,6 @@ function Key._Destroy<T>(self: _Key<T> & { [any]: any })
 		end
 		table.clear(t)
 		setmetatable(t, Utils.TOMBSTONE_METATABLE)
-		table.freeze(t)
 	end
 
 	if self._data then
@@ -247,7 +246,6 @@ function Key._Destroy<T>(self: _Key<T> & { [any]: any })
 
 	table.clear(self)
 	setmetatable(self, Utils.TOMBSTONE_METATABLE)
-	table.freeze(self :: any)
 end
 
 function KeyClass.new<T>(options: types.KeyOptions<T>, datastore: DataStore, user: number, load: boolean?, readOnly: boolean?): types.Key<T>

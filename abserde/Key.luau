@@ -309,8 +309,8 @@ function KeyClass.new<T>(options: types.KeyOptions<T>, datastore: DataStore, use
 		return proxy
 	end
 
+	self.Options = options
 	self.Loaded = not not load
-
 	self.Data = createProxy({}, "")
 
 	return self

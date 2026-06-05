@@ -162,13 +162,14 @@ function Key._Load<T>(self: _Key<T>): Promise.TypedPromise<T?>
 				task.wait(5)
 			end
 		end
-		assert(data and info)
 
 		if data == nil then
 			-- No existing data, start with default
 			self._dirty = true
 			return resolve(Utils.deepClone(self._options.Default))
 		end
+
+		assert(info)
 		if type(data) ~= "buffer" then return reject(`Expected existing data to be of type buffer Got {type(data)}`) end
 
 		-- We save metadata in the datastore incase certain settings like compression change in the Profile. This allows us to still load old data correctly
@@ -232,7 +233,7 @@ function Key._Destroy<T>(self: _Key<T> & { [any]: any })
 
 	local function deepClear(t: { [any]: any })
 		for _, v in t do
-			if type(v) == "table" then deepClear(t) end
+			if type(v) == "table" then deepClear(v) end
 		end
 		table.clear(t)
 		setmetatable(t, Utils.TOMBSTONE_METATABLE)

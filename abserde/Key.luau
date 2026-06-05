@@ -30,7 +30,6 @@ export type _Key<T> = types.Key<T> & {
 	_Unlock: (self: _Key<T>) -> Promise.Promise,
 	_Save: (self: _Key<T>) -> Promise.Promise,
 	_Load: (self: _Key<T>) -> Promise.TypedPromise<T?>,
-	_EnsureLoaded: (self: _Key<T>) -> (),
 	_Destroy: (self: _Key<T>) -> (),
 }
 
@@ -222,7 +221,7 @@ function Key._Load<T>(self: _Key<T>): Promise.TypedPromise<T?>
 	end)
 end
 
-function Key._EnsureLoaded<T>(self: _Key<T>)
+function Key.Load<T>(self: _Key<T>)
 	if self.Loaded then return end
 	self._data = self:_Load():expect()
 	self.Loaded = true
@@ -261,7 +260,7 @@ function KeyClass.new<T>(options: types.KeyOptions<T>, datastore: DataStore, use
 	self._dirty = false
 	self._lastSaved = time()
 
-	if load then self:_EnsureLoaded() end
+	if load then self:Load() end
 
 	local proxyCache = setmetatable({}, { __mode = "k" })
 	local function createProxy(tbl: any, path: string)
@@ -270,7 +269,7 @@ function KeyClass.new<T>(options: types.KeyOptions<T>, datastore: DataStore, use
 
 		local proxy = setmetatable({}, {
 			__index = function(_, key: string)
-				self:_EnsureLoaded()
+				assert(self.Loaded, "Key is not loaded. Call `Key:Load()` before reading or writing to it.")
 
 				local targetTbl = if path == "" then self._data else tbl
 				local val = targetTbl[key]
@@ -280,7 +279,7 @@ function KeyClass.new<T>(options: types.KeyOptions<T>, datastore: DataStore, use
 				return val
 			end,
 			__newindex = function(_, key: string, newVal: unknown)
-				self:_EnsureLoaded()
+				assert(self.Loaded, "Key is not loaded. Call `Key:Load()` before reading or writing to it.")
 
 				if self._options.Lockable and self.Locked then
 					warn(`Attempted to write to locked key {self._datastore.Name} for user {self._user}`)
@@ -296,7 +295,7 @@ function KeyClass.new<T>(options: types.KeyOptions<T>, datastore: DataStore, use
 				end
 			end,
 			__iter = function()
-				self:_EnsureLoaded()
+				assert(self.Loaded, "Key is not loaded. Call `Key:Load()` before reading or writing to it.")
 
 				local targetTbl = if path == "" then self._data else tbl
 				return function(_, k)

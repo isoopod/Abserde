@@ -83,6 +83,7 @@ export type Key<T> = {
 	Data: T,
 	Loaded: boolean, -- Has the key been loaded from the datastore?
 	Locked: boolean, -- Is the key currently locked by another server?
+	Load: (self: Key<T>) -> (), -- Used to load the key and ensure it's loaded.
 }
 
 export type TransformationFile = {

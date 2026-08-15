@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- Key:Wipe() - resets the keys data to the default
+
+### Fixed
+
+- Various edge cases with the proxy system.
+- Key.Data being reassignable.
+- Prevents the proxy interface tables from being accidentally used instead of the underlying data.
+
 ## [0.1.3] - 2026-07-24
 
 ## [0.1.2] - 2026-06-05

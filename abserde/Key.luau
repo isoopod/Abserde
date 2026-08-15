@@ -10,9 +10,19 @@ local Utils = require(script.Parent.Utils)
 local types = require(script.Parent.types)
 
 local PROJECT = Utils.PROJECT
+local VALUE_SENTINEL = newproxy() -- Unique sentinel for data proxy
+local PROXY_TAG = newproxy() -- Identifier for any proxified table
 
 local Key = {}
-local KeyClass = { metatable = { __index = Key } }
+local KeyClass = {
+	metatable = {
+		__index = Key,
+		__newindex = function(self, key, value)
+			assert(key ~= "Data", "Data cannot be reassigned. Use Key:Wipe to clear data")
+			rawset(self, key, value)
+		end,
+	},
+}
 
 export type _Key<T> = types.Key<T> & {
 	_loading: boolean,
@@ -228,6 +238,12 @@ function Key.Load<T>(self: _Key<T>)
 	self.Loaded = true
 end
 
+function Key.Wipe<T>(self: _Key<T>)
+	if self._readOnly or (self.Options.Lockable and self.Locked) then return end
+	self._data = Utils.deepClone(self._options.Default or {})
+	self._dirty = true
+end
+
 function Key._Destroy<T>(self: _Key<T> & { [any]: any })
 	if getmetatable(self :: any) == "AbserdeTombstone" then return end
 
@@ -263,33 +279,83 @@ function KeyClass.new<T>(options: types.KeyOptions<T>, datastore: DataStore, use
 
 	if load then self:Load() end
 
-	local proxyCache = setmetatable({}, { __mode = "k" })
-	local function createProxy(tbl: any, path: string)
-		if type(tbl) ~= "table" then return tbl end
-		if proxyCache[tbl] then return proxyCache[tbl] end
+	--[[
+		Data proxy system.
+
+		`self.Data` exposes `self._data` through a tree of read/write-guarded proxy
+		tables, so every access can be checked against `Loaded` and `Locked` state.
+
+		Each proxy represents a position in the data tree, identified by `pathKeys`
+		(an ordered array of the keys used to reach it from the root) and `pathString`
+		(the same path concatenated for use as a cache key and in error messages).
+
+		Critically, a proxy does NOT hold a reference to the table it wraps. It only
+		holds its path. The live table is re-resolved from `self._data` on every
+		access via `resolveTable`. This is required because `Key:Load()` replaces
+		`self._data` wholesale on reload; if a proxy captured a table reference
+		directly, it would keep pointing at the old, now-detached table after a
+		reload, silently diverging from the real data.
+
+		`proxyCache` ensures repeated access to the same path returns the same proxy
+		instance, so `key.Data.Foo == key.Data.Foo` holds. It is not weak: proxies are
+		keyed by string path rather than by table identity, and are bounded in number
+		by the shape of the underlying data, so there is nothing meaningful to collect.
+	]]
+
+	local proxyCache: { [string]: any } = {}
+
+	-- Walks down from the current `self._data` along `pathKeys`, returning the live
+	-- table from that position, or nil if the path no longer resolves to a table
+	-- (e.g. a parent was overwritten with a scalar or removed).
+	local function resolveTable(pathKeys: { string }): any
+		local targetTbl: any = self._data
+		for _, key in pathKeys do
+			local nextTbl = targetTbl[key]
+			if type(nextTbl) ~= "table" then return nil end
+			targetTbl = nextTbl
+		end
+		return targetTbl
+	end
+
+	local function createProxy(pathKeys: { string }, pathString: string)
+		local cached = proxyCache[pathString]
+		if cached then return cached end
 
 		local proxy = setmetatable({}, {
 			__index = function(_, key: string)
 				assert(self.Loaded, "Key is not loaded. Call `Key:Load()` before reading or writing to it.")
 
-				local targetTbl = if path == "" then self._data else tbl
+				local targetTbl = resolveTable(pathKeys)
+				if targetTbl == nil then return nil end
+
 				local val = targetTbl[key]
 
-				if type(val) == "table" and rawget(val, "__value") and not next(val, "__value") then return val.__value end
-				if type(val) == "table" then return createProxy(val, Utils.concatPath(path, key)) end
+				-- Unbox a scalar that was boxed to distinguish it from a nested table.
+				if type(val) == "table" and rawget(val, VALUE_SENTINEL) ~= nil and next(val, VALUE_SENTINEL) == nil then return val[VALUE_SENTINEL] end
+
+				if type(val) == "table" then
+					local childPathKeys = table.clone(pathKeys)
+					table.insert(childPathKeys, key)
+					return createProxy(childPathKeys, Utils.concatPath(pathString, key))
+				end
+
 				return val
 			end,
 			__newindex = function(_, key: string, newVal: unknown)
 				assert(self.Loaded, "Key is not loaded. Call `Key:Load()` before reading or writing to it.")
+
+				local newValMeta = type(newVal) == "table" and getmetatable(newVal)
+				assert(not (newValMeta and rawget(newValMeta :: any, PROXY_TAG)), `Cannot assign a Key data proxy directly to "{key}". Assign the underlying value(s) instead.`)
 
 				if self._options.Lockable and self.Locked then
 					warn(`Attempted to write to locked key {self._datastore.Name} for user {self._user}`)
 					return
 				end
 
-				local targetTbl = if path == "" then self._data else tbl
-				local oldVal = targetTbl[key]
+				local targetTbl = resolveTable(pathKeys)
+				assert(targetTbl ~= nil, `Cannot write to "{key}": Parent path "{pathString}" no longer resolves to a table.`)
 
+				local oldVal = targetTbl[key]
 				if oldVal ~= newVal then
 					targetTbl[key] = newVal
 					self._dirty = true
@@ -298,20 +364,27 @@ function KeyClass.new<T>(options: types.KeyOptions<T>, datastore: DataStore, use
 			__iter = function()
 				assert(self.Loaded, "Key is not loaded. Call `Key:Load()` before reading or writing to it.")
 
-				local targetTbl = if path == "" then self._data else tbl
+				local targetTbl = resolveTable(pathKeys) or {}
 				return function(_, k)
 					local nk, nv = next(targetTbl, k)
 					return nk, nv
 				end, nil, nil
 			end,
+			__len = function()
+				assert(self.Loaded, "Key is not loaded. Call `Key:Load()` before reading or writing to it.")
+
+				local targetTbl = resolveTable(pathKeys)
+				return targetTbl and #targetTbl or 0
+			end,
+			PROXY_TAG = true,
 		})
 
-		proxyCache[tbl] = proxy
+		proxyCache[pathString] = proxy
 		return proxy
 	end
 
 	self.Loaded = not not load
-	self.Data = createProxy({}, "")
+	rawset(self :: any, "Data", createProxy({}, ""))
 
 	return self
 end

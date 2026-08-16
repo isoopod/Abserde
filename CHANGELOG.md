@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- Re-enables support for `Data.A = Data.A or {}` and similar statements.
+  `KeyA.Data.A = KeyB.Data.A` are still unsupported, but acyclic references within the same key are now permitted.
+- Fixes the __iter and__len metamethods.
+
 ## [0.1.5] - 2026-08-16
 
 ### Added

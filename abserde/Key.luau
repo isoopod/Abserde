@@ -10,8 +10,6 @@ local Utils = require(script.Parent.Utils)
 local types = require(script.Parent.types)
 
 local PROJECT = Utils.PROJECT
-local VALUE_SENTINEL = newproxy() -- Unique sentinel for data proxy
-local PROXY_TAG = newproxy() -- Identifier for any proxified table
 
 local Key = {}
 local KeyClass = {
@@ -29,7 +27,6 @@ export type _Key<T> = types.Key<T> & {
 	_readOnly: boolean,
 	_dirty: boolean, -- Do we have unsaved changes?
 	_lastSaved: number?,
-	_options: types.KeyOptions<T>,
 	_datastore: DataStore,
 	_memlock: MemoryStoreSortedMap,
 	_user: number,
@@ -47,7 +44,7 @@ Key.ClassName = "Key"
 
 function Key._Lock<T>(self: _Key<T>): Promise.TypedPromise<boolean>
 	if self.Options.Lockable == false or self._readOnly then return Promise.resolve(false) end
-	local interval, user, memlock = self._options.LockInterval or 60, tostring(self._user), self._memlock
+	local interval, user, memlock = self.Options.LockInterval or 60, tostring(self._user), self._memlock
 
 	return Promise.retryWithDelay(function()
 		return Promise.new(function(resolve, reject)
@@ -115,13 +112,11 @@ function Key._Save<T>(self: _Key<T>): Promise.Promise
 		success, dataToSave = pcall(schemaInfo.schema.Write, schemaInfo.schema, self._data)
 		if not success then return reject(`Failed to encode data for key {self._datastore.Name} for user {self._user}: {dataToSave}`) end
 
-		if self._options.Compression then
-			dataToSave = EncodingService:CompressBuffer(dataToSave, self._options.Compression.algorithm, self._options.Compression.compressionLevel)
-		end
+		if self.Options.Compression then dataToSave = EncodingService:CompressBuffer(dataToSave, self.Options.Compression.algorithm, self.Options.Compression.compressionLevel) end
 
 		local metadata = {
 			SchemaVersion = schemaInfo.version,
-			CompressionAlgorithm = if self._options.Compression then self._options.Compression.algorithm.Name else nil,
+			CompressionAlgorithm = if self.Options.Compression then self.Options.Compression.algorithm.Name else nil,
 		}
 
 		local setOptions = Instance.new("DataStoreSetOptions")
@@ -142,14 +137,14 @@ end
 
 function Key._Load<T>(self: _Key<T>): Promise.TypedPromise<T?>
 	-- If this is a lockable key and its our first time loading, start the lock loop
-	if not self._loading and self._options.Lockable ~= false then
+	if not self._loading and self.Options.Lockable ~= false then
 		self._loading = true
 		table.insert(
 			self._jobs,
 			task.spawn(function()
 				while true do
 					self.Locked = not self:_Lock():expect()
-					task.wait(self._options.LockInterval or 60)
+					task.wait(self.Options.LockInterval or 60)
 				end
 			end)
 		)
@@ -178,7 +173,7 @@ function Key._Load<T>(self: _Key<T>): Promise.TypedPromise<T?>
 		if data == nil then
 			-- No existing data, start with default
 			self._dirty = true
-			return resolve(Utils.deepClone(self._options.Default))
+			return resolve(Utils.deepClone(self.Options.Default))
 		end
 
 		assert(info)
@@ -225,12 +220,12 @@ function Key._Load<T>(self: _Key<T>): Promise.TypedPromise<T?>
 		end
 
 		-- Hydrate the existing data with the default value so that missing keys are filled in, but existing values are not overwritten
-		if Utils.deepMerge(rawData, self._options.Default or {}) then self._dirty = true end
+		if Utils.deepMerge(rawData, self.Options.Default or {}) then self._dirty = true end
 
 		resolve(rawData)
 	end):catch(function(err)
 		warn(`Failed to load key {self._datastore.Name} for user {self._user}: {err}`)
-		return Utils.deepClone(self._options.Default)
+		return Utils.deepClone(self.Options.Default)
 	end)
 end
 
@@ -246,7 +241,7 @@ function Key.Wipe<T>(self: _Key<T>)
 		return
 	end
 
-	self._data = Utils.deepClone(self._options.Default or {})
+	self._data = Utils.deepClone(self.Options.Default or {})
 	self._dirty = true
 end
 
@@ -278,7 +273,6 @@ function KeyClass.new<T>(options: types.KeyOptions<T>, datastore: DataStore, use
 	local self: _Key<T> = setmetatable({}, KeyClass.metatable) :: _Key<T>
 
 	self._readOnly = not not readOnly
-	self._options = options
 	self._datastore = datastore
 	self._memlock = MemoryStoreService:GetSortedMap(datastore.Name)
 	self._user = user
@@ -290,35 +284,27 @@ function KeyClass.new<T>(options: types.KeyOptions<T>, datastore: DataStore, use
 
 	if load then self:Load() end
 
-	--[[
-		Data proxy system.
+	local ProxyMetatable = {}
 
-		`self.Data` exposes `self._data` through a tree of read/write-guarded proxy
-		tables, so every access can be checked against `Loaded` and `Locked` state.
+	-- Proxy-private state, keyed by proxy identity rather than stored on the proxy
+	-- itself. Weak keys mean an entry is collected as soon as nothing else holds
+	-- the corresponding proxy — no state ever leaks into raw enumeration of the
+	-- proxy, and no explicit cleanup is required.
+	local ProxyState: { [any]: { path: { any }, children: { [any]: any } } } = setmetatable({}, { __mode = "k" })
 
-		Each proxy represents a position in the data tree, identified by `pathKeys`
-		(an ordered array of the keys used to reach it from the root) and `pathString`
-		(the same path concatenated for use as a cache key and in error messages).
-
-		Critically, a proxy does NOT hold a reference to the table it wraps. It only
-		holds its path. The live table is re-resolved from `self._data` on every
-		access via `resolveTable`. This is required because `Key:Load()` replaces
-		`self._data` wholesale on reload; if a proxy captured a table reference
-		directly, it would keep pointing at the old, now-detached table after a
-		reload, silently diverging from the real data.
-
-		`proxyCache` ensures repeated access to the same path returns the same proxy
-		instance, so `key.Data.Foo == key.Data.Foo` holds. It is not weak: proxies are
-		keyed by string path rather than by table identity, and are bounded in number
-		by the shape of the underlying data, so there is nothing meaningful to collect.
-	]]
-
-	local proxyCache: { [string]: any } = {}
+	-- Builds a human readable path string for debugging.
+	local function pathToString(pathKeys: { any }): string
+		local parts = table.create(#pathKeys)
+		for i, key in pathKeys do
+			parts[i] = tostring(key)
+		end
+		return table.concat(parts, ".")
+	end
 
 	-- Walks down from the current `self._data` along `pathKeys`, returning the live
 	-- table from that position, or nil if the path no longer resolves to a table
 	-- (e.g. a parent was overwritten with a scalar or removed).
-	local function resolveTable(pathKeys: { string }): any
+	local function resolveTable(pathKeys: { any }): any
 		local targetTbl: any = self._data
 		for _, key in pathKeys do
 			local nextTbl = targetTbl[key]
@@ -328,74 +314,91 @@ function KeyClass.new<T>(options: types.KeyOptions<T>, datastore: DataStore, use
 		return targetTbl
 	end
 
-	local function createProxy(pathKeys: { string }, pathString: string)
-		local cached = proxyCache[pathString]
-		if cached then return cached end
-
-		local proxy = setmetatable({}, {
-			__index = function(_, key: string)
-				assert(self.Loaded, "Key is not loaded. Call `Key:Load()` before reading or writing to it.")
-
-				local targetTbl = resolveTable(pathKeys)
-				if targetTbl == nil then return nil end
-
-				local val = targetTbl[key]
-
-				-- Unbox a scalar that was boxed to distinguish it from a nested table.
-				if type(val) == "table" and rawget(val, VALUE_SENTINEL) ~= nil and next(val, VALUE_SENTINEL) == nil then return val[VALUE_SENTINEL] end
-
-				if type(val) == "table" then
-					local childPathKeys = table.clone(pathKeys)
-					table.insert(childPathKeys, key)
-					return createProxy(childPathKeys, Utils.concatPath(pathString, key))
-				end
-
-				return val
-			end,
-			__newindex = function(_, key: string, newVal: unknown)
-				assert(self.Loaded, "Key is not loaded. Call `Key:Load()` before reading or writing to it.")
-
-				local newValMeta = type(newVal) == "table" and getmetatable(newVal)
-				assert(not (newValMeta and rawget(newValMeta :: any, PROXY_TAG)), `Cannot assign a Key data proxy directly to "{key}". Assign the underlying value(s) instead.`)
-
-				if self._readOnly or (self._options.Lockable ~= false and self.Locked) then
-					warn(`Attempted to write to locked key {self._datastore.Name} for user {self._user}`)
-					return
-				end
-
-				local targetTbl = resolveTable(pathKeys)
-				assert(targetTbl ~= nil, `Cannot write to "{key}": Parent path "{pathString}" no longer resolves to a table.`)
-
-				local oldVal = targetTbl[key]
-				if oldVal ~= newVal then
-					targetTbl[key] = newVal
-					self._dirty = true
-				end
-			end,
-			__iter = function()
-				assert(self.Loaded, "Key is not loaded. Call `Key:Load()` before reading or writing to it.")
-
-				local targetTbl = resolveTable(pathKeys) or {}
-				return function(_, k)
-					local nk, nv = next(targetTbl, k)
-					return nk, nv
-				end, nil, nil
-			end,
-			__len = function()
-				assert(self.Loaded, "Key is not loaded. Call `Key:Load()` before reading or writing to it.")
-
-				local targetTbl = resolveTable(pathKeys)
-				return targetTbl and #targetTbl or 0
-			end,
-			PROXY_TAG = true,
-		})
-
-		proxyCache[pathString] = proxy
+	local function createProxy(pathKeys: { any })
+		local proxy: any = setmetatable({}, ProxyMetatable)
+		ProxyState[proxy] = { path = pathKeys, children = setmetatable({}, { __mode = "v" }) } :: any
 		return proxy
 	end
 
+	-- Given a value read from the live table at `key`, returns what a proxy consumer
+	-- should see: scalars pass through unchanged, tables are wrapped in a cached
+	-- child proxy so that further access (whether via __index or __iter) is
+	-- consistently guarded and cache-coherent.
+	local function getOrCreateChild(state: { path: { any }, children: { [any]: any } }, val: unknown, key: any): unknown
+		if type(val) ~= "table" then return val end
+
+		local child = state.children[key]
+		if not child then
+			local childPathKeys = table.clone(state.path)
+			table.insert(childPathKeys, key)
+			child = createProxy(childPathKeys)
+			state.children[key] = child
+		end
+		return child
+	end
+
+	ProxyMetatable.__index = function(proxy, key: unknown): unknown
+		assert(self.Loaded, "Key is not loaded. Call `Key:Load()` before reading or writing to it.")
+
+		local state = ProxyState[proxy]
+		local pathKeys = state.path
+		local targetTbl = resolveTable(pathKeys)
+		if targetTbl == nil then return nil end
+
+		return getOrCreateChild(state, targetTbl[key], key)
+	end
+
+	ProxyMetatable.__newindex = function(proxy, key: unknown, newVal: unknown)
+		assert(self.Loaded, "Key is not loaded. Call `Key:Load()` before reading or writing to it.")
+
+		if self._readOnly or (self.Options.Lockable ~= false and self.Locked) then return warn(`Attempted to write to locked key {self._datastore.Name} for user {self._user}`) end
+
+		local state = ProxyState[proxy]
+		local targetTbl = resolveTable(state.path)
+		if targetTbl == nil then error(`Cannot write to "{key}": parent path "{pathToString(state.path)} no longer resolves to a table."`) end
+
+		-- If the value being assigned is itself one of our proxies, unwrap it to
+		-- the live table it currently represents. This is what makes
+		-- `data.X = data.Y or {}` work regardless of whether `data.Y` already
+		-- exists: when it does, the read returns a proxy, which is unwrapped
+		-- back to the same underlying table it already refers to, so the
+		-- assignment is a harmless no-op. It also allows genuine cross-tree
+		-- reference assignment, e.g. `data.A.Foo = data.B.Bar`.
+		local newValState = ProxyState[newVal]
+		local resolvedVal = if newValState then resolveTable(newValState.path) else newVal
+
+		local oldVal = targetTbl[key]
+		if oldVal ~= resolvedVal then
+			targetTbl[key] = resolvedVal
+			self._dirty = true
+			state.children[key] = nil
+		end
+	end
+
+	ProxyMetatable.__iter = function(proxy)
+		assert(self.Loaded, "Key is not loaded. Call `Key:Load()` before reading or writing to it.")
+
+		local state = ProxyState[proxy]
+		local targetTbl = resolveTable(ProxyState[proxy].path) or {}
+
+		return function(_, k): (unknown, unknown)
+			local nk, nv = next(targetTbl, k)
+			if nk == nil then return nil, nil end
+			return nk, getOrCreateChild(state, nv, nk)
+		end,
+			nil,
+			nil
+	end
+
+	ProxyMetatable.__len = function(proxy)
+		assert(self.Loaded, "Key is not loaded. Call `Key:Load()` before reading or writing to it.")
+
+		local targetTbl = resolveTable(ProxyState[proxy].path)
+		return targetTbl and #targetTbl or 0
+	end
+
 	self.Loaded = not not load
-	rawset(self :: any, "Data", createProxy({}, ""))
+	rawset(self :: any, "Data", createProxy({}))
 
 	-- Handle autosave
 	local autosaveInterval = options.AutosaveInterval or 300

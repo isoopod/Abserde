@@ -12,6 +12,7 @@ local AbserdeProfileClass = { metatable = { __index = AbserdeProfile } }
 
 type _AbserdeProfile<T> = types.Profile<T> & {
 	_sessions: { [number]: { [number]: types.Session<T> } },
+	_closingPromises: { [types.Session<T>]: Promise.TypedPromise<any> },
 }
 
 AbserdeProfile.ClassName = "AbserdeProfile"
@@ -34,11 +35,16 @@ function AbserdeProfile.Open<T>(self: _AbserdeProfile<T>, user: types.user, slot
 
 		-- If we open a session with a Player object, we should automatically close it when they leave
 		if type(user) ~= "number" then
-			local connection: RBXScriptConnection
-			connection = Players.PlayerRemoving:Connect(function(player)
+			local connection = Players.PlayerRemoving:Connect(function(player)
 				if player == user then
-					if session then session:Close() end
-					self._sessions[slot or 1][userid] = nil
+					if session then
+						local closePromise = session:Close()
+						self._closingPromises[session] = closePromise
+
+						closePromise:finally(function()
+							self._closingPromises[session] = nil
+						end)
+					end
 				end
 			end)
 			session.Closing:Once(function()
@@ -75,6 +81,8 @@ function AbserdeProfileClass.new<T>(options: types.ProfileOptions<T>): types.Pro
 	local self: _AbserdeProfile<T> = setmetatable({}, AbserdeProfileClass.metatable) :: any
 
 	self._sessions = {}
+	self._closingPromises = {}
+
 	for i = 1, options.SlotLimit or 1 do
 		self._sessions[i] = {}
 	end
@@ -85,12 +93,18 @@ function AbserdeProfileClass.new<T>(options: types.ProfileOptions<T>): types.Pro
 	-- Ensure the server remains open until all open sessions are closed
 	game:BindToClose(function()
 		local promises: { any } = {}
+
 		for _, slot in self._sessions do
 			for _, session in slot do
 				table.insert(promises, session:Close())
 			end
 		end
-		Promise.all(promises):expect()
+
+		for _, closePromise in self._closingPromises do
+			table.insert(promises, closePromise)
+		end
+
+		if #promises > 0 then Promise.all(promises):expect() end
 	end)
 
 	return self

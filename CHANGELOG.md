@@ -7,11 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.6] - 2026-08-16
+
 ### Fixed
 
 - Re-enables support for `Data.A = Data.A or {}` and similar statements.
   `KeyA.Data.A = KeyB.Data.A` are still unsupported, but acyclic references within the same key are now permitted.
-- Fixes the __iter and__len metamethods.
+- Fixes the **iter and**len metamethods.
 
 ## [0.1.5] - 2026-08-16
 
@@ -54,7 +56,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Initial release
 
-[unreleased]: https://github.com/isoopod/Abserde/compare/v0.1.5...HEAD
+[unreleased]: https://github.com/isoopod/Abserde/compare/v0.1.6...HEAD
+[0.1.6]: https://github.com/isoopod/Abserde/compare/v0.1.5...v0.1.6
 [0.1.5]: https://github.com/isoopod/Abserde/compare/v0.1.4...v0.1.5
 [0.1.4]: https://github.com/isoopod/Abserde/compare/v0.1.3...v0.1.4
 [0.1.3]: https://github.com/isoopod/Abserde/compare/v0.1.2...v0.1.3

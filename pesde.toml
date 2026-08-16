@@ -1,5 +1,5 @@
 name = "isoopod/abserde"
-version = "0.1.4"
+version = "0.1.5"
 description = "A Binary Storage Engine Reimagining Datastore Efficiency"
 authors = ["isoopod"]
 repository = "https://github.com/isoopod/Abserde"

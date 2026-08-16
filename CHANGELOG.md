@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.5] - 2026-08-16
+
 ### Added
 
 - Implements autosaving on keys, by default a key is autosaved every 5 minutes. Can be disabled by setting the key's AutosaveInterval to 0
@@ -46,7 +48,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Initial release
 
-[unreleased]: https://github.com/isoopod/Abserde/compare/v0.1.4...HEAD
+[unreleased]: https://github.com/isoopod/Abserde/compare/v0.1.5...HEAD
+[0.1.5]: https://github.com/isoopod/Abserde/compare/v0.1.4...v0.1.5
 [0.1.4]: https://github.com/isoopod/Abserde/compare/v0.1.3...v0.1.4
 [0.1.3]: https://github.com/isoopod/Abserde/compare/v0.1.2...v0.1.3
 [0.1.2]: https://github.com/isoopod/Abserde/compare/v0.1.1...v0.1.2

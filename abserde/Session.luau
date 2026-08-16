@@ -140,7 +140,7 @@ function AbserdeSessionClass.new<T>(profile: types.ProfileOptions<T>, userid: nu
 		assert(#key <= 24, "Profile key names cannot exceed 24 characters")
 		local datastore = getDataStore(profile.Name, key, slot)
 
-		keys[key] = Key.new(options, datastore, userid, not readOnly and options.AutoLoad == false, readOnly)
+		keys[key] = Key.new(options, datastore, userid, not readOnly and options.AutoLoad ~= false, readOnly)
 	end
 
 	self.Keys = table.freeze(keys)

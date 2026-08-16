@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- Implements autosaving on keys, by default a key is autosaved every 5 minutes. Can be disabled by setting the key's AutosaveInterval to 0
+
+### Fixed
+
+- Key autoloading condition only being true if autoload was set to false. Now nil and true will enable autoloading and false will disable it as intended.
+- Fix Key:Wipe and other incorrect behaviour due to not properly defaulting the Lockable option to true.
+- Cleans up any active threads inside a Key when destroying it.
+
 ## [0.1.4] - 2026-08-15
 
 ### Added

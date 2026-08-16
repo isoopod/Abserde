@@ -46,7 +46,7 @@ export type _Key<T> = types.Key<T> & {
 Key.ClassName = "Key"
 
 function Key._Lock<T>(self: _Key<T>): Promise.TypedPromise<boolean>
-	if not self.Options.Lockable or self._readOnly then return Promise.resolve(false) end
+	if self.Options.Lockable == false or self._readOnly then return Promise.resolve(false) end
 	local interval, user, memlock = self._options.LockInterval or 60, tostring(self._user), self._memlock
 
 	return Promise.retryWithDelay(function()
@@ -76,7 +76,8 @@ function Key._Lock<T>(self: _Key<T>): Promise.TypedPromise<boolean>
 end
 
 function Key._Unlock<T>(self: _Key<T>): Promise.Promise
-	if not (self.Options.Lockable and not self.Locked) then return Promise.resolve() end
+	-- Only unlock if the key is lockable and we possess the lock (self.Locked == false)
+	if not (self.Options.Lockable ~= false and not self.Locked) then return Promise.resolve() end
 	local user, memlock = tostring(self._user), self._memlock
 
 	return Promise.new(function(resolve, reject)
@@ -101,7 +102,8 @@ local function isErrorRecoverable(error: string)
 end
 
 function Key._Save<T>(self: _Key<T>): Promise.Promise
-	if not self._dirty or self._readOnly or (self.Options.Lockable and self.Locked) then return Promise.resolve() end
+	-- Dont save if we dont have to or are in a locked state (from the key being locked by another server or read only)
+	if not self._dirty or self._readOnly or (self.Options.Lockable ~= false and self.Locked) then return Promise.resolve() end
 
 	return Promise.new(function(resolve, reject)
 		local success, schemaInfo, dataToSave, err
@@ -140,7 +142,7 @@ end
 
 function Key._Load<T>(self: _Key<T>): Promise.TypedPromise<T?>
 	-- If this is a lockable key and its our first time loading, start the lock loop
-	if not self._loading and self._options.Lockable then
+	if not self._loading and self._options.Lockable ~= false then
 		self._loading = true
 		table.insert(
 			self._jobs,
@@ -239,7 +241,11 @@ function Key.Load<T>(self: _Key<T>)
 end
 
 function Key.Wipe<T>(self: _Key<T>)
-	if self._readOnly or (self.Options.Lockable and self.Locked) then return end
+	if self._readOnly or (self.Options.Lockable ~= false and self.Locked) then
+		warn(`Attempted to wipe locked key {self._datastore.Name} for user {self._user}`)
+		return
+	end
+
 	self._data = Utils.deepClone(self._options.Default or {})
 	self._dirty = true
 end
@@ -260,6 +266,10 @@ function Key._Destroy<T>(self: _Key<T> & { [any]: any })
 		self._data = nil
 	end
 
+	for _, job in self._jobs do
+		pcall(task.cancel, job)
+	end
+
 	table.clear(self)
 	setmetatable(self, Utils.TOMBSTONE_METATABLE)
 end
@@ -274,6 +284,7 @@ function KeyClass.new<T>(options: types.KeyOptions<T>, datastore: DataStore, use
 	self._user = user
 	self._dirty = false
 	self._lastSaved = time()
+	self._jobs = {}
 
 	self.Options = options
 
@@ -347,7 +358,7 @@ function KeyClass.new<T>(options: types.KeyOptions<T>, datastore: DataStore, use
 				local newValMeta = type(newVal) == "table" and getmetatable(newVal)
 				assert(not (newValMeta and rawget(newValMeta :: any, PROXY_TAG)), `Cannot assign a Key data proxy directly to "{key}". Assign the underlying value(s) instead.`)
 
-				if self._options.Lockable and self.Locked then
+				if self._readOnly or (self._options.Lockable ~= false and self.Locked) then
 					warn(`Attempted to write to locked key {self._datastore.Name} for user {self._user}`)
 					return
 				end
@@ -385,6 +396,21 @@ function KeyClass.new<T>(options: types.KeyOptions<T>, datastore: DataStore, use
 
 	self.Loaded = not not load
 	rawset(self :: any, "Data", createProxy({}, ""))
+
+	-- Handle autosave
+	local autosaveInterval = options.AutosaveInterval or 300
+	if autosaveInterval > 0 then
+		table.insert(
+			self._jobs,
+			task.spawn(function()
+				while task.wait(autosaveInterval) do
+					self:_Save():catch(function(err)
+						warn(`[Abserde]: Autosave failed for {datastore.Name}: {err}`)
+					end)
+				end
+			end)
+		)
+	end
 
 	return self
 end

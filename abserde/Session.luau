@@ -14,7 +14,9 @@ local types = require(script.Parent.types)
 
 local AbserdeSession = {}
 local AbserdeSessionClass = { metatable = { __index = AbserdeSession } }
-type _AbserdeSession<T> = types.Session<T> & {}
+type _AbserdeSession<T> = types.Session<T> & {
+	_closingPromise: Promise.TypedPromise<>?,
+}
 
 AbserdeSession.ClassName = "AbserdeSession"
 
@@ -25,7 +27,8 @@ local function getDataStore(profileName: string, key: string, slot: number): Dat
 	return datastoreCache[cacheKey]
 end
 
-function AbserdeSession.Save<T>(self: types.Session<T>)
+function AbserdeSession.Save<T>(self: _AbserdeSession<T>)
+	if getmetatable(self :: any) == "AbserdeTombstone" then return Promise.resolve() end
 	local promises: { any } = {}
 	for name, key in self.Keys :: { [string]: Key._Key<unknown> } do
 		table.insert(
@@ -49,7 +52,8 @@ function AbserdeSession.Save<T>(self: types.Session<T>)
 	end)
 end
 
-function AbserdeSession.Release<T>(self: types.Session<T>)
+function AbserdeSession.Release<T>(self: _AbserdeSession<T>)
+	if getmetatable(self :: any) == "AbserdeTombstone" then return Promise.resolve() end
 	local promises: { any } = {}
 	for name, key in self.Keys :: { [string]: Key._Key<unknown> } do
 		table.insert(
@@ -73,13 +77,24 @@ function AbserdeSession.Release<T>(self: types.Session<T>)
 	end)
 end
 
-function AbserdeSession.Close<T>(self: types.Session<T>)
-	return Promise.new(function(resolve)
+function AbserdeSession.Close<T>(self: _AbserdeSession<T>)
+	if getmetatable(self :: any) == "AbserdeTombstone" then return Promise.resolve() end
+
+	if self._closingPromise ~= nil then return self._closingPromise end
+
+	self._closingPromise = Promise.new(function(resolve)
+		-- If there are ongoing saves in any keys, cancel them so the latest data is saved on close
+		for _, key in self.Keys :: { [string]: Key._Key<unknown> } do
+			if key._savingPromise and key._savingPromise:getStatus() == "Started" then key._savingPromise:cancel() end
+		end
+
 		local success, err
 		success, err = self:Save():await()
 		if not success then TestService:Error(`[Abserde]: Error saving profile {self.Profile.Name}<{self.User}> while closing: {err}`) end
 		success, err = self:Release():await()
 		if not success then TestService:Error(`[Abserde]: Error releasing profile {self.Profile.Name}<{self.User}> while closing: {err}`) end
+
+		if getmetatable(self :: any) == "AbserdeTombstone" then return resolve() end
 
 		self.Closing:Fire()
 		self.Closing:Destroy()
@@ -93,6 +108,7 @@ function AbserdeSession.Close<T>(self: types.Session<T>)
 		setmetatable(self, Utils.TOMBSTONE_METATABLE)
 		resolve()
 	end)
+	return self._closingPromise :: any
 end
 
 function AbserdeSession.AtomicSet<T>(self: types.Session<T>, key: string, value: any)
@@ -147,6 +163,8 @@ function AbserdeSessionClass.new<T>(profile: types.ProfileOptions<T>, userid: nu
 	self.Open = true
 
 	self.Closing = Signal.new()
+
+	self._closingPromise = nil
 
 	return self
 end

@@ -26,7 +26,7 @@ export type _Key<T> = types.Key<T> & {
 	_loading: boolean,
 	_readOnly: boolean,
 	_dirty: boolean, -- Do we have unsaved changes?
-	_lastSaved: number?,
+	_savingPromise: Promise.TypedPromise<>?,
 	_datastore: DataStore,
 	_memlock: MemoryStoreSortedMap,
 	_user: number,
@@ -43,6 +43,7 @@ export type _Key<T> = types.Key<T> & {
 Key.ClassName = "Key"
 
 function Key._Lock<T>(self: _Key<T>): Promise.TypedPromise<boolean>
+	if getmetatable(self) == "AbserdeTombstone" then return Promise.resolve(false) end
 	if self.Options.Lockable == false or self._readOnly then return Promise.resolve(false) end
 	local interval, user, memlock = self.Options.LockInterval or 60, tostring(self._user), self._memlock
 
@@ -73,6 +74,7 @@ function Key._Lock<T>(self: _Key<T>): Promise.TypedPromise<boolean>
 end
 
 function Key._Unlock<T>(self: _Key<T>): Promise.Promise
+	if getmetatable(self) == "AbserdeTombstone" then return Promise.resolve() end
 	-- Only unlock if the key is lockable and we possess the lock (self.Locked == false)
 	if not (self.Options.Lockable ~= false and not self.Locked) then return Promise.resolve() end
 	local user, memlock = tostring(self._user), self._memlock
@@ -98,11 +100,13 @@ local function isErrorRecoverable(error: string)
 		or string.find(e, "successful but") -- 503 / 504
 end
 
-function Key._Save<T>(self: _Key<T>): Promise.Promise
+function Key._Save<T>(self: _Key<T>): Promise.TypedPromise<>
+	if getmetatable(self) == "AbserdeTombstone" then return Promise.resolve() end
+	if self._savingPromise ~= nil and self._savingPromise:getStatus() == "Started" then return self._savingPromise end
 	-- Dont save if we dont have to or are in a locked state (from the key being locked by another server or read only)
 	if not self._dirty or self._readOnly or (self.Options.Lockable ~= false and self.Locked) then return Promise.resolve() end
 
-	return Promise.new(function(resolve, reject)
+	self._savingPromise = Promise.new(function(resolve, reject, onCancel)
 		local success, schemaInfo, dataToSave, err
 
 		success, schemaInfo = pcall(Schemas.GetSchema, self.Options.Schema.name, nil)
@@ -122,20 +126,29 @@ function Key._Save<T>(self: _Key<T>): Promise.Promise
 		local setOptions = Instance.new("DataStoreSetOptions")
 		setOptions:SetMetadata(metadata)
 
+		local cancelled = false
+		onCancel(function()
+			cancelled = true
+		end)
+
 		for attempt = 1, MAX_RETRIES do
 			success, err = pcall(self._datastore.SetAsync, self._datastore, tostring(self._user), dataToSave, { self._user }, setOptions)
+			if cancelled then return end
 			if success or not isErrorRecoverable(err) then break end
 			if attempt < MAX_RETRIES then task.wait(BACKOFF_TIME * 2 ^ attempt * (0.5 + math.random() * 0.5)) end
 		end
 		if not success then return reject(`Datastore SetAsync failed for key {self._datastore.Name} for user {self._user}: {err}`) end
+		if getmetatable(self :: any) == "AbserdeTombstone" then return resolve() end
 
 		self._dirty = false
-		self._lastSaved = time()
 		resolve()
 	end)
+
+	return self._savingPromise :: any
 end
 
 function Key._Load<T>(self: _Key<T>): Promise.TypedPromise<T?>
+	if getmetatable(self) == "AbserdeTombstone" then return Promise.resolve(nil) end
 	-- If this is a lockable key and its our first time loading, start the lock loop
 	if not self._loading and self.Options.Lockable ~= false then
 		self._loading = true
@@ -236,6 +249,7 @@ function Key.Load<T>(self: _Key<T>)
 end
 
 function Key.Wipe<T>(self: _Key<T>)
+	if getmetatable(self) == "AbserdeTombstone" then return end
 	if self._readOnly or (self.Options.Lockable ~= false and self.Locked) then
 		warn(`Attempted to wipe locked key {self._datastore.Name} for user {self._user}`)
 		return
@@ -265,6 +279,7 @@ function Key._Destroy<T>(self: _Key<T> & { [any]: any })
 		pcall(task.cancel, job)
 	end
 
+	-- TODO: Leave better error when accessing any dangling proxy interfaces
 	table.clear(self)
 	setmetatable(self, Utils.TOMBSTONE_METATABLE)
 end
@@ -277,7 +292,6 @@ function KeyClass.new<T>(options: types.KeyOptions<T>, datastore: DataStore, use
 	self._memlock = MemoryStoreService:GetSortedMap(datastore.Name)
 	self._user = user
 	self._dirty = false
-	self._lastSaved = time()
 	self._jobs = {}
 
 	self.Options = options

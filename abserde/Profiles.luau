@@ -37,7 +37,7 @@ function AbserdeProfile.Open<T>(self: _AbserdeProfile<T>, user: types.user, slot
 		if type(user) ~= "number" then
 			local connection = Players.PlayerRemoving:Connect(function(player)
 				if player == user then
-					if session then
+					if session and session.Open and not self._closingPromises[session] then
 						local closePromise = session:Close()
 						self._closingPromises[session] = closePromise
 

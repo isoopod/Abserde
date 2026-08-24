@@ -23,6 +23,7 @@ export type Profile<T> = {
 export type ProfileOptions<T> = {
 	Name: string, -- The name of the profile, used to uniquely identify datastores by profile and key.
 	Keys: T, -- Map of string -> KeyOptions.
+	LockInterval: number?, -- [60] (seconds) How often to relock a session or obtain a lock.
 	SlotLimit: number?, -- [nil] If an integer between 1 and 10, this profile will have multislot enabled,
 	-- allowing for selected keys to have independent save files.
 	SlotPath: string?, -- [nil] If enabled in a multislot profile, this path will be used to find the slot that should
@@ -38,6 +39,7 @@ export type Session<T> = {
 	Keys: T,
 	Open: boolean,
 	Closing: Signal.Signal<>,
+	Locked: boolean,
 	-- Manually saves all keys in the session (that have been modified).
 	-- Only works if the session is not locked by another server.
 	Save: (self: Session<T>) -> Promise.Promise,
@@ -69,7 +71,6 @@ export type KeyOptions<T> = {
 	Schema: _AbserdeSchema<T>,
 	Default: T,
 	Lockable: boolean?, -- [true] A locked key cannot be modified by other servers.
-	LockInterval: number?, -- [60] (seconds) How often to relock a key or obtain a lock.
 	AutoLoad: boolean?, -- [true] Automatically loads the key when the session is opened, otherwise will be loaded when indexed.
 	AutosaveInterval: number?, -- [5] (minutes) Automatically saves the data at this interval if the key is loaded and has unsaved changes. Set to 0 to disable autosave.
 	Compression: CompressionSettings?,

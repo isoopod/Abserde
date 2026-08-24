@@ -6,22 +6,20 @@ local MemoryStoreService = game:GetService("MemoryStoreService")
 -- Modules
 local Promise = require(script.Parent.Parent.roblox_packages.Promise)
 local Schemas = require(script.Parent.Schemas)
+local Scythe = require(script.Parent.Parent.roblox_packages.Scythe)
 local Utils = require(script.Parent.Utils)
 local types = require(script.Parent.types)
 
 export type _Key<T> = types.Key<T> & {
-	_loading: boolean,
 	_readOnly: boolean,
 	_dirty: boolean, -- Do we have unsaved changes?
 	_savingPromise: Promise.TypedPromise<>?,
 	_datastore: DataStore,
 	_memlock: MemoryStoreSortedMap,
 	_user: number,
-	_jobs: { thread },
 	_data: T?,
+	_scythe: number,
 
-	_Lock: (self: _Key<T>) -> Promise.TypedPromise<boolean>,
-	_Unlock: (self: _Key<T>) -> Promise.Promise,
 	_Save: (self: _Key<T>) -> Promise.Promise,
 	_Load: (self: _Key<T>) -> Promise.TypedPromise<T?>,
 	_Destroy: (self: _Key<T>) -> (),
@@ -43,53 +41,6 @@ local KeyClass = {
 Key.ClassName = "Key"
 
 local KeyCache: { [string]: _Key<any> } = {}
-
-function Key._Lock<T>(self: _Key<T>): Promise.TypedPromise<boolean>
-	if getmetatable(self) == "AbserdeTombstone" then return Promise.resolve(false) end
-	if self.Options.Lockable == false or self._readOnly then return Promise.resolve(false) end
-	local interval, user, memlock = self.Options.LockInterval or 60, tostring(self._user), self._memlock
-
-	return Promise.retryWithDelay(function()
-		return Promise.new(function(resolve, reject)
-			local jobId
-			local success, result = pcall(memlock.UpdateAsync, memlock, user, function(oldValue: string?)
-				jobId = oldValue
-				-- Return JobId to lock, or nil if already locked by someone else
-				return if jobId == nil or jobId == game.JobId then game.JobId else nil
-			end, interval + 30)
-
-			if not success then
-				return reject(result) -- Triggers the retry
-			end
-
-			if not result then
-				-- This means the lock is held by another JobId
-				return resolve(false)
-			end
-
-			resolve(true)
-		end)
-	end, 3, 1):catch(function(err)
-		warn(`Failed to acquire lock for key {self._datastore.Name} for user {self._user}: {err}`)
-		return false
-	end)
-end
-
-function Key._Unlock<T>(self: _Key<T>): Promise.Promise
-	if getmetatable(self) == "AbserdeTombstone" then return Promise.resolve() end
-	-- Only unlock if the key is lockable and we possess the lock (self.Locked == false)
-	if not (self.Options.Lockable ~= false and not self.Locked) then return Promise.resolve() end
-	local user, memlock = tostring(self._user), self._memlock
-
-	return Promise.new(function(resolve, reject)
-		local success, err = pcall(memlock.RemoveAsync, memlock, user)
-		if not success then
-			warn(`Failed to release lock for key {self._datastore.Name} for user {self._user}: {err}`)
-			return reject(err)
-		end
-		resolve()
-	end)
-end
 
 local MAX_RETRIES = 5
 local BACKOFF_TIME = 5
@@ -151,19 +102,6 @@ end
 
 function Key._Load<T>(self: _Key<T>): Promise.TypedPromise<T?>
 	if getmetatable(self) == "AbserdeTombstone" then return Promise.resolve(nil) end
-	-- If this is a lockable key and its our first time loading, start the lock loop
-	if not self._loading and self.Options.Lockable ~= false then
-		self._loading = true
-		table.insert(
-			self._jobs,
-			task.spawn(function()
-				while true do
-					self.Locked = not self:_Lock():expect()
-					task.wait(self.Options.LockInterval or 60)
-				end
-			end)
-		)
-	end
 
 	return Promise.new(function(resolve, reject, onCancel)
 		local cancelled = false
@@ -279,9 +217,7 @@ function Key._Destroy<T>(self: _Key<T> & { [any]: any })
 		self._data = nil
 	end
 
-	for _, job in self._jobs do
-		pcall(task.cancel, job)
-	end
+	Scythe.clean(self._scythe)
 
 	-- TODO: Leave better error when accessing any dangling proxy interfaces
 	table.clear(self)
@@ -300,7 +236,7 @@ function KeyClass.new<T>(options: types.KeyOptions<T>, datastore: DataStore, use
 	self._memlock = MemoryStoreService:GetSortedMap(datastore.Name)
 	self._user = user
 	self._dirty = false
-	self._jobs = {}
+	self._scythe = Scythe.scope()
 
 	self.Options = options
 
@@ -425,8 +361,8 @@ function KeyClass.new<T>(options: types.KeyOptions<T>, datastore: DataStore, use
 	-- Handle autosave
 	local autosaveInterval = options.AutosaveInterval or 300
 	if autosaveInterval > 0 then
-		table.insert(
-			self._jobs,
+		Scythe.add(
+			self._scythe,
 			task.spawn(function()
 				while task.wait(autosaveInterval) do
 					self:_Save():catch(function(err)

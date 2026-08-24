@@ -23,8 +23,12 @@ export type Profile<T> = {
 export type ProfileOptions<T> = {
 	Name: string, -- The name of the profile, used to uniquely identify datastores by profile and key.
 	Keys: T, -- Map of string -> KeyOptions.
-	SlotLimit: number?, -- [nil; 1-10?] If a number between 1 and 10, this profile will have multislot enabled,
+	SlotLimit: number?, -- [nil] If an integer between 1 and 10, this profile will have multislot enabled,
 	-- allowing for selected keys to have independent save files.
+	SlotPath: string?, -- [nil] If enabled in a multislot profile, this path will be used to find the slot that should
+	-- be used by default when opening or finding a session without providing the slot.
+	-- The path is delimited by forward slashes, with the first component being one of the profile's keys.
+	-- This will load slot 1 of the key denoted by the path (so using a key that is not multislot is advised).
 }
 
 export type Session<T> = {
@@ -70,7 +74,7 @@ export type KeyOptions<T> = {
 	AutosaveInterval: number?, -- [5] (minutes) Automatically saves the data at this interval if the key is loaded and has unsaved changes. Set to 0 to disable autosave.
 	Compression: CompressionSettings?,
 	TransformationFile: string?, -- The name of a file in the Transformations folder that defines data transformations for this key for version migration.
-	Multislot: boolean?, -- [false], if true, this key will have multiple slots allowing for different save files.
+	Multislot: boolean?, -- [false] if true, this key will have multiple slots allowing for different save files.
 	-- This works by loading the session with the slot argument. A profile with multislot enabled does not require.
 	-- all keys to be multislot.
 	-- Keys that are not multislot will be shared across all slots.

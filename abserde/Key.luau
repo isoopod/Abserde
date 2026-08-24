@@ -9,19 +9,6 @@ local Schemas = require(script.Parent.Schemas)
 local Utils = require(script.Parent.Utils)
 local types = require(script.Parent.types)
 
-local PROJECT = Utils.PROJECT
-
-local Key = {}
-local KeyClass = {
-	metatable = {
-		__index = Key,
-		__newindex = function(self, key, value)
-			assert(key ~= "Data", "Data cannot be reassigned. Use Key:Wipe to clear data")
-			rawset(self, key, value)
-		end,
-	},
-}
-
 export type _Key<T> = types.Key<T> & {
 	_loading: boolean,
 	_readOnly: boolean,
@@ -40,7 +27,22 @@ export type _Key<T> = types.Key<T> & {
 	_Destroy: (self: _Key<T>) -> (),
 }
 
+local PROJECT = Utils.PROJECT
+
+local Key = {}
+local KeyClass = {
+	metatable = {
+		__index = Key,
+		__newindex = function(self, key, value)
+			assert(key ~= "Data", "Data cannot be reassigned. Use Key:Wipe to clear data")
+			rawset(self, key, value)
+		end,
+	},
+}
+
 Key.ClassName = "Key"
+
+local KeyCache: { [string]: _Key<any> } = {}
 
 function Key._Lock<T>(self: _Key<T>): Promise.TypedPromise<boolean>
 	if getmetatable(self) == "AbserdeTombstone" then return Promise.resolve(false) end
@@ -262,6 +264,8 @@ end
 function Key._Destroy<T>(self: _Key<T> & { [any]: any })
 	if getmetatable(self :: any) == "AbserdeTombstone" then return end
 
+	KeyCache[`{self._datastore.Name}_{self._user}`] = nil
+
 	local function deepClear(t: { [any]: any })
 		for _, v in t do
 			if type(v) == "table" then deepClear(v) end
@@ -285,7 +289,11 @@ function Key._Destroy<T>(self: _Key<T> & { [any]: any })
 end
 
 function KeyClass.new<T>(options: types.KeyOptions<T>, datastore: DataStore, user: number, load: boolean?, readOnly: boolean?): types.Key<T>
+	local cacheKey = `{datastore.Name}_{user}`
+	if not readOnly and KeyCache[cacheKey] then return KeyCache[cacheKey] end
+
 	local self: _Key<T> = setmetatable({}, KeyClass.metatable) :: _Key<T>
+	if not readOnly then KeyCache[cacheKey] = self end
 
 	self._readOnly = not not readOnly
 	self._datastore = datastore

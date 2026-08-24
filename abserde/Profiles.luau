@@ -11,6 +11,7 @@ local AbserdeProfile = {}
 local AbserdeProfileClass = { metatable = { __index = AbserdeProfile } }
 
 type _AbserdeProfile<T> = types.Profile<T> & {
+	_openingPromises: { [number]: { Promise.TypedPromise<types.Session<unknown>> } },
 	_sessions: { [number]: { [number]: types.Session<T> } },
 	_closingPromises: { [types.Session<T>]: Promise.TypedPromise<any> },
 }
@@ -22,10 +23,15 @@ function AbserdeProfile.Open<T>(self: _AbserdeProfile<T>, user: types.user, slot
 	assert(slot >= 1 and slot <= (self.Options.SlotLimit or 1), "Invalid slot number")
 	local userid = type(user) == "number" and user or user.UserId
 
-	return Promise.new(function(resolve, reject)
-		if self._sessions[slot or 1][userid] then return resolve(self._sessions[slot or 1][userid]) end
+	if self._sessions[slot or 1][userid] then return Promise.resolve(self._sessions[slot or 1][userid]) end
+	if self._openingPromises[slot or 1][userid] then return self._openingPromises[slot or 1][userid] end
+
+	local promise = Promise.new(function(resolve, reject)
 		local s, session = pcall(Session.new, self.Options, userid, slot or 1, nil)
-		if not s then return reject(session) end
+		if not s then
+			self._openingPromises[slot or 1][userid] = nil
+			return reject(session)
+		end
 		self._sessions[slot or 1][userid] = session
 
 		-- Remove the session from the cache when it closes
@@ -52,8 +58,12 @@ function AbserdeProfile.Open<T>(self: _AbserdeProfile<T>, user: types.user, slot
 			end)
 		end
 
+		self._openingPromises[slot or 1][userid] = nil
 		resolve(session)
 	end)
+
+	self._openingPromises[slot or 1][userid] = promise
+	return promise
 end
 
 function AbserdeProfile.Find<T>(self: _AbserdeProfile<T>, user: types.user, slot: number?): types.Session<T>?
@@ -80,10 +90,12 @@ end
 function AbserdeProfileClass.new<T>(options: types.ProfileOptions<T>): types.Profile<T>
 	local self: _AbserdeProfile<T> = setmetatable({}, AbserdeProfileClass.metatable) :: any
 
+	self._openingPromises = {}
 	self._sessions = {}
 	self._closingPromises = {}
 
 	for i = 1, options.SlotLimit or 1 do
+		self._openingPromises[i] = {}
 		self._sessions[i] = {}
 	end
 

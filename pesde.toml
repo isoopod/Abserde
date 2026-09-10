@@ -30,10 +30,7 @@ pesde = "^0.7.0"
 lune = "^0.10.2"
 
 [dependencies]
-Pack = { name = "isoopod/pack", version = "^0.12.0" }
+Pack = { name = "isoopod/pack", version = "^0.12.1" }
 Promise = { wally = "howmanysmall/typed-promise", version = "^4.0.6" }
-Signal = { wally = "data-oriented-house/lemonsignal", version = "^1.11.0" }
-Scythe = { wally = "synttx/scythe", version = "^1.2.1" }
-
-[patches]
-"wally#synttx/scythe" = { "1.2.1 roblox" = "patches/wally#synttx+scythe-1.2.1+roblox.patch" }
+Signal = { wally = "data-oriented-house/lemonsignal", version = "^2.0.0" }
+Scythe = { wally = "synttx/scythe", version = "^1.2.2" }

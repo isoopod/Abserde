@@ -16,14 +16,14 @@ frktest = [{ name = "itsfrank/frktest", version = "^0.0.4", index = "https://git
 luau-lsp = [{ name = "pesde/luau_lsp", version = "=1.66.1", index = "https://github.com/pesde-pkg/index", target = "lune" }, "dev"]
 stylua = [{ name = "pesde/stylua", version = "=2.4.1", index = "https://github.com/pesde-pkg/index", target = "lune" }, "dev"]
 
-[graph."isoopod/pack@0.12.0 roblox"]
-direct = ["Pack", { name = "isoopod/pack", version = "^0.12.0", index = "default" }, "standard"]
+[graph."isoopod/pack@0.12.1 roblox"]
+direct = ["Pack", { name = "isoopod/pack", version = "^0.12.1", index = "default" }, "standard"]
 
-[graph."isoopod/pack@0.12.0 roblox".pkg_ref]
+[graph."isoopod/pack@0.12.1 roblox".pkg_ref]
 ref_ty = "pesde"
 index_url = "https://github.com/pesde-pkg/index"
 
-[graph."isoopod/pack@0.12.0 roblox".pkg_ref.dependencies]
+[graph."isoopod/pack@0.12.1 roblox".pkg_ref.dependencies]
 Jest = [{ wally = "wally#jsdotlua/jest", version = "^3.10.0", index = "https://github.com/UpliftGames/wally-index" }, "dev"]
 JestGlobals = [{ wally = "wally#jsdotlua/jest-globals", version = "^3.10.0", index = "https://github.com/UpliftGames/wally-index" }, "dev"]
 rojo = [{ name = "pesde/rojo", version = "^7.5.1", index = "https://github.com/pesde-pkg/index", target = "lune" }, "dev"]
@@ -142,10 +142,10 @@ pathfs = [{ name = "jiwonz/pathfs", version = "^0.6.0", index = "https://github.
 result = [{ name = "lukadev_0/result", version = "^1.2.1", index = "https://github.com/pesde-pkg/index" }, "peer"]
 unzip = [{ name = "0x5eal/unzip", version = "^0.2.0", index = "https://github.com/pesde-pkg/index", target = "luau" }, "standard"]
 
-[graph."wally#data-oriented-house/lemonsignal@1.11.0 roblox"]
-direct = ["Signal", { wally = "wally#data-oriented-house/lemonsignal", version = "^1.11.0", index = "default" }, "standard"]
+[graph."wally#data-oriented-house/lemonsignal@2.0.0 roblox"]
+direct = ["Signal", { wally = "wally#data-oriented-house/lemonsignal", version = "^2.0.0", index = "default" }, "standard"]
 
-[graph."wally#data-oriented-house/lemonsignal@1.11.0 roblox".pkg_ref]
+[graph."wally#data-oriented-house/lemonsignal@2.0.0 roblox".pkg_ref]
 ref_ty = "wally"
 index_url = "https://github.com/UpliftGames/wally-index"
 
@@ -166,9 +166,9 @@ index_url = "https://github.com/UpliftGames/wally-index"
 [graph."wally#howmanysmall/typed-promise@4.0.6 roblox".pkg_ref.dependencies]
 Promise = [{ wally = "wally#evaera/promise", version = ">=4.0.0, <5.0.0", index = "https://github.com/UpliftGames/wally-index" }, "standard"]
 
-[graph."wally#synttx/scythe@1.2.1 roblox"]
-direct = ["Scythe", { wally = "wally#synttx/scythe", version = "^1.2.1", index = "default" }, "standard"]
+[graph."wally#synttx/scythe@1.2.2 roblox"]
+direct = ["Scythe", { wally = "wally#synttx/scythe", version = "^1.2.2", index = "default" }, "standard"]
 
-[graph."wally#synttx/scythe@1.2.1 roblox".pkg_ref]
+[graph."wally#synttx/scythe@1.2.2 roblox".pkg_ref]
 ref_ty = "wally"
 index_url = "https://github.com/UpliftGames/wally-index"

@@ -1,6 +1,6 @@
 name = "isoopod/abserde"
 version = "0.2.1"
-description = "A Binary Storage Engine Reimagining Datastore Efficiency"
+description = "Advanced Binary Storage Engine Rethinking Datastore Ergonomics"
 authors = ["isoopod"]
 repository = "https://github.com/isoopod/Abserde"
 license = "MIT"

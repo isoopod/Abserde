@@ -7,7 +7,26 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- Fix error when closing a session caused by the promise handler tombstoning self before the closingPromise was set.
+- Make returning a cached key respect autoload.
+- Move key autoloading to after Data proxy is set, ensuring cached keys will be loaded correctly when autoloading is enabled.
+- Various improvements to promise deduplication throughout the library.
+
 ## [0.2.0] - 2026-09-09
+
+### Added
+
+- `Profile.SlotPath`: A `/` separate path to a value that can be used to source the `slot` argument for loading multislot keys with. The first component of this path is one of the Keys in the profile, the rest is a path within that key to the value. The Key used should not have `MultiSlot` enabled.
+
+### Changed
+
+- Rescopes the session-locking to apply to entire sessions, not per key. Moves the `LockInterval` setting to Session instead of Key.
+
+### Fixed
+
+- Various fixes related to concurrency.
 
 ## [0.1.6] - 2026-08-16
 

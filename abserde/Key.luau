@@ -1,19 +1,20 @@
 --!optimize 2
 
 -- Services
-local EncodingService = game:GetService("EncodingService")
-local MemoryStoreService = game:GetService("MemoryStoreService")
+const EncodingService = game:GetService("EncodingService")
+const MemoryStoreService = game:GetService("MemoryStoreService")
 -- Modules
-local Promise = require(script.Parent.Parent.roblox_packages.Promise)
-local Schemas = require(script.Parent.Schemas)
-local Scythe = require(script.Parent.Parent.roblox_packages.Scythe)
-local Utils = require(script.Parent.Utils)
-local types = require(script.Parent.types)
+const Promise = require(script.Parent.Parent.roblox_packages.Promise)
+const Schemas = require(script.Parent.Schemas)
+const Scythe = require(script.Parent.Parent.roblox_packages.Scythe)
+const Utils = require(script.Parent.Utils)
+const types = require(script.Parent.types)
 
 export type _Key<T> = types.Key<T> & {
 	_readOnly: boolean,
 	_dirty: boolean, -- Do we have unsaved changes?
 	_savingPromise: Promise.TypedPromise<>?,
+	_loadingPromise: Promise.TypedPromise<T?>?,
 	_datastore: DataStore,
 	_memlock: MemoryStoreSortedMap,
 	_user: number,
@@ -25,10 +26,10 @@ export type _Key<T> = types.Key<T> & {
 	_Destroy: (self: _Key<T>) -> (),
 }
 
-local PROJECT = Utils.PROJECT
+const PROJECT = Utils.PROJECT
 
-local Key = {}
-local KeyClass = {
+const Key = {}
+const KeyClass = {
 	metatable = {
 		__index = Key,
 		__newindex = function(self, key, value)
@@ -40,13 +41,13 @@ local KeyClass = {
 
 Key.ClassName = "Key"
 
-local KeyCache: { [string]: _Key<any> } = {}
+const KeyCache: { [string]: _Key<any> } = {}
 
-local MAX_RETRIES = 5
-local BACKOFF_TIME = 5
+const MAX_RETRIES = 5
+const BACKOFF_TIME = 5
 
-local function isErrorRecoverable(error: string)
-	local e = string.lower(error)
+const function isErrorRecoverable(error: string)
+	const e = string.lower(error)
 	return string.find(e, "throttled")
 		or string.find(e, "corrupted") -- 501
 		or string.find(e, "rejected the request with error") -- 502
@@ -55,11 +56,14 @@ end
 
 function Key._Save<T>(self: _Key<T>): Promise.TypedPromise<>
 	if getmetatable(self) == "AbserdeTombstone" then return Promise.resolve() end
-	if self._savingPromise ~= nil and self._savingPromise:getStatus() == "Started" then return self._savingPromise end
+	if self._savingPromise ~= nil then return self._savingPromise end
 	-- Dont save if we dont have to or are in a locked state (from the key being locked by another server or read only)
 	if not self._dirty or self._readOnly or (self.Options.Lockable ~= false and self.Locked) then return Promise.resolve() end
 
-	self._savingPromise = Promise.new(function(resolve, reject, onCancel)
+	local promise
+	promise = Promise.new(function(resolve, reject, onCancel)
+		self._savingPromise = promise
+
 		local success, schemaInfo, dataToSave, err
 
 		success, schemaInfo = pcall(Schemas.GetSchema, self.Options.Schema.name, nil)
@@ -71,12 +75,12 @@ function Key._Save<T>(self: _Key<T>): Promise.TypedPromise<>
 
 		if self.Options.Compression then dataToSave = EncodingService:CompressBuffer(dataToSave, self.Options.Compression.algorithm, self.Options.Compression.compressionLevel) end
 
-		local metadata = {
+		const metadata = {
 			SchemaVersion = schemaInfo.version,
 			CompressionAlgorithm = if self.Options.Compression then self.Options.Compression.algorithm.Name else nil,
 		}
 
-		local setOptions = Instance.new("DataStoreSetOptions")
+		const setOptions = Instance.new("DataStoreSetOptions")
 		setOptions:SetMetadata(metadata)
 
 		local cancelled = false
@@ -95,15 +99,21 @@ function Key._Save<T>(self: _Key<T>): Promise.TypedPromise<>
 
 		self._dirty = false
 		resolve()
+	end):finally(function()
+		self._savingPromise = nil
 	end)
 
-	return self._savingPromise :: any
+	return promise
 end
 
 function Key._Load<T>(self: _Key<T>): Promise.TypedPromise<T?>
 	if getmetatable(self) == "AbserdeTombstone" then return Promise.resolve(nil) end
+	if self._loadingPromise then return self._loadingPromise end
 
-	return Promise.new(function(resolve, reject, onCancel)
+	local promise
+	promise = Promise.new(function(resolve, reject, onCancel)
+		self._loadingPromise = promise
+
 		local cancelled = false
 		onCancel(function()
 			cancelled = true
@@ -133,30 +143,30 @@ function Key._Load<T>(self: _Key<T>): Promise.TypedPromise<T?>
 		if type(data) ~= "buffer" then return reject(`Expected existing data to be of type buffer Got {type(data)}`) end
 
 		-- We save metadata in the datastore incase certain settings like compression change in the Profile. This allows us to still load old data correctly
-		local metadata = info:GetMetadata()
-		local schemaVersion = metadata.SchemaVersion
-		local compressionAlgorithmName = metadata.CompressionAlgorithm
+		const metadata = info:GetMetadata()
+		const schemaVersion = metadata.SchemaVersion
+		const compressionAlgorithmName = metadata.CompressionAlgorithm
 
 		-- If this data was compressed, decompress before decoding
 		if compressionAlgorithmName then
-			local compressionAlgorithm = Enum.CompressionAlgorithm:FromName(metadata.CompressionAlgorithm or "")
+			const compressionAlgorithm = Enum.CompressionAlgorithm:FromName(metadata.CompressionAlgorithm or "")
 			if compressionAlgorithm then data = EncodingService:DecompressBuffer(data, compressionAlgorithm) end
 		end
 
-		local schema = Schemas.GetSchema(self.Options.Schema.name, schemaVersion)
+		const schema = Schemas.GetSchema(self.Options.Schema.name, schemaVersion)
 		if not schema then return reject(`No schema found with version {schemaVersion}`) end
 
 		local rawData = schema.schema:Read(data)
 
 		-- Handle data transformations for version migrations
 		-- Transformations apply based on the last saved version. Any transformations above that version will be applied in order until we are up to date
-		local transformation = self.Options.TransformationFile
-		local transformationFile = transformation and PROJECT.Transformations:FindFirstChild(transformation)
+		const transformation = self.Options.TransformationFile
+		const transformationFile = transformation and PROJECT.Transformations:FindFirstChild(transformation)
 		if transformationFile then
-			local s, transformations = pcall(require, transformationFile)
+			const s, transformations = pcall(require, transformationFile)
 			if s then
 				-- Since the transformation file might be sparse (missing some versions), we need to build an ordered list of versions to iterate over
-				local versions = {}
+				const versions = {}
 				for v in transformations do
 					table.insert(versions, v)
 				end
@@ -176,10 +186,16 @@ function Key._Load<T>(self: _Key<T>): Promise.TypedPromise<T?>
 		if Utils.deepMerge(rawData, self.Options.Default or {}) then self._dirty = true end
 
 		resolve(rawData)
-	end):catch(function(err)
-		warn(`Failed to load key {self._datastore.Name} for user {self._user}: {err}`)
-		return Utils.deepClone(self.Options.Default)
 	end)
+		:catch(function(err)
+			warn(`Failed to load key {self._datastore.Name} for user {self._user}: {err}`)
+			return Utils.deepClone(self.Options.Default)
+		end)
+		:finally(function()
+			self._loadingPromise = nil
+		end)
+
+	return promise
 end
 
 function Key.Load<T>(self: _Key<T>)
@@ -204,7 +220,7 @@ function Key._Destroy<T>(self: _Key<T> & { [any]: any })
 
 	KeyCache[`{self._datastore.Name}_{self._user}`] = nil
 
-	local function deepClear(t: { [any]: any })
+	const function deepClear(t: { [any]: any })
 		for _, v in t do
 			if type(v) == "table" then deepClear(v) end
 		end
@@ -225,10 +241,15 @@ function Key._Destroy<T>(self: _Key<T> & { [any]: any })
 end
 
 function KeyClass.new<T>(options: types.KeyOptions<T>, datastore: DataStore, user: number, load: boolean?, readOnly: boolean?): types.Key<T>
-	local cacheKey = `{datastore.Name}_{user}`
-	if not readOnly and KeyCache[cacheKey] then return KeyCache[cacheKey] end
+	const cacheKey = `{datastore.Name}_{user}`
+	if not readOnly and KeyCache[cacheKey] then
+		const self = KeyCache[cacheKey]
+		if self._loadingPromise then self._loadingPromise:expect() end
+		if load then self:Load() end
+		return self
+	end
 
-	local self: _Key<T> = setmetatable({}, KeyClass.metatable) :: _Key<T>
+	const self: _Key<T> = setmetatable({}, KeyClass.metatable) :: _Key<T>
 	if not readOnly then KeyCache[cacheKey] = self end
 
 	self._readOnly = not not readOnly
@@ -240,19 +261,17 @@ function KeyClass.new<T>(options: types.KeyOptions<T>, datastore: DataStore, use
 
 	self.Options = options
 
-	if load then self:Load() end
-
-	local ProxyMetatable = {}
+	const ProxyMetatable = {}
 
 	-- Proxy-private state, keyed by proxy identity rather than stored on the proxy
 	-- itself. Weak keys mean an entry is collected as soon as nothing else holds
 	-- the corresponding proxy — no state ever leaks into raw enumeration of the
 	-- proxy, and no explicit cleanup is required.
-	local ProxyState: { [any]: { path: { any }, children: { [any]: any } } } = setmetatable({}, { __mode = "k" })
+	const ProxyState: { [any]: { path: { any }, children: { [any]: any } } } = setmetatable({}, { __mode = "k" })
 
 	-- Builds a human readable path string for debugging.
-	local function pathToString(pathKeys: { any }): string
-		local parts = table.create(#pathKeys)
+	const function pathToString(pathKeys: { any }): string
+		const parts = table.create(#pathKeys)
 		for i, key in pathKeys do
 			parts[i] = tostring(key)
 		end
@@ -262,18 +281,18 @@ function KeyClass.new<T>(options: types.KeyOptions<T>, datastore: DataStore, use
 	-- Walks down from the current `self._data` along `pathKeys`, returning the live
 	-- table from that position, or nil if the path no longer resolves to a table
 	-- (e.g. a parent was overwritten with a scalar or removed).
-	local function resolveTable(pathKeys: { any }): any
+	const function resolveTable(pathKeys: { any }): any
 		local targetTbl: any = self._data
 		for _, key in pathKeys do
-			local nextTbl = targetTbl[key]
+			const nextTbl = targetTbl[key]
 			if type(nextTbl) ~= "table" then return nil end
 			targetTbl = nextTbl
 		end
 		return targetTbl
 	end
 
-	local function createProxy(pathKeys: { any })
-		local proxy: any = setmetatable({}, ProxyMetatable)
+	const function createProxy(pathKeys: { any })
+		const proxy: any = setmetatable({}, ProxyMetatable)
 		ProxyState[proxy] = { path = pathKeys, children = setmetatable({}, { __mode = "v" }) } :: any
 		return proxy
 	end
@@ -282,12 +301,12 @@ function KeyClass.new<T>(options: types.KeyOptions<T>, datastore: DataStore, use
 	-- should see: scalars pass through unchanged, tables are wrapped in a cached
 	-- child proxy so that further access (whether via __index or __iter) is
 	-- consistently guarded and cache-coherent.
-	local function getOrCreateChild(state: { path: { any }, children: { [any]: any } }, val: unknown, key: any): unknown
+	const function getOrCreateChild(state: { path: { any }, children: { [any]: any } }, val: unknown, key: any): unknown
 		if type(val) ~= "table" then return val end
 
 		local child = state.children[key]
 		if not child then
-			local childPathKeys = table.clone(state.path)
+			const childPathKeys = table.clone(state.path)
 			table.insert(childPathKeys, key)
 			child = createProxy(childPathKeys)
 			state.children[key] = child
@@ -298,9 +317,9 @@ function KeyClass.new<T>(options: types.KeyOptions<T>, datastore: DataStore, use
 	ProxyMetatable.__index = function(proxy, key: unknown): unknown
 		assert(self.Loaded, "Key is not loaded. Call `Key:Load()` before reading or writing to it.")
 
-		local state = ProxyState[proxy]
-		local pathKeys = state.path
-		local targetTbl = resolveTable(pathKeys)
+		const state = ProxyState[proxy]
+		const pathKeys = state.path
+		const targetTbl = resolveTable(pathKeys)
 		if targetTbl == nil then return nil end
 
 		return getOrCreateChild(state, targetTbl[key], key)
@@ -311,8 +330,8 @@ function KeyClass.new<T>(options: types.KeyOptions<T>, datastore: DataStore, use
 
 		if self._readOnly or (self.Options.Lockable ~= false and self.Locked) then return warn(`Attempted to write to locked key {self._datastore.Name} for user {self._user}`) end
 
-		local state = ProxyState[proxy]
-		local targetTbl = resolveTable(state.path)
+		const state = ProxyState[proxy]
+		const targetTbl = resolveTable(state.path)
 		if targetTbl == nil then error(`Cannot write to "{key}": parent path "{pathToString(state.path)} no longer resolves to a table."`) end
 
 		-- If the value being assigned is itself one of our proxies, unwrap it to
@@ -322,10 +341,10 @@ function KeyClass.new<T>(options: types.KeyOptions<T>, datastore: DataStore, use
 		-- back to the same underlying table it already refers to, so the
 		-- assignment is a harmless no-op. It also allows genuine cross-tree
 		-- reference assignment, e.g. `data.A.Foo = data.B.Bar`.
-		local newValState = ProxyState[newVal]
-		local resolvedVal = if newValState then resolveTable(newValState.path) else newVal
+		const newValState = ProxyState[newVal]
+		const resolvedVal = if newValState then resolveTable(newValState.path) else newVal
 
-		local oldVal = targetTbl[key]
+		const oldVal = targetTbl[key]
 		if oldVal ~= resolvedVal then
 			targetTbl[key] = resolvedVal
 			self._dirty = true
@@ -336,11 +355,11 @@ function KeyClass.new<T>(options: types.KeyOptions<T>, datastore: DataStore, use
 	ProxyMetatable.__iter = function(proxy)
 		assert(self.Loaded, "Key is not loaded. Call `Key:Load()` before reading or writing to it.")
 
-		local state = ProxyState[proxy]
-		local targetTbl = resolveTable(ProxyState[proxy].path) or {}
+		const state = ProxyState[proxy]
+		const targetTbl = resolveTable(ProxyState[proxy].path) or {}
 
 		return function(_, k): (unknown, unknown)
-			local nk, nv = next(targetTbl, k)
+			const nk, nv = next(targetTbl, k)
 			if nk == nil then return nil, nil end
 			return nk, getOrCreateChild(state, nv, nk)
 		end,
@@ -351,15 +370,19 @@ function KeyClass.new<T>(options: types.KeyOptions<T>, datastore: DataStore, use
 	ProxyMetatable.__len = function(proxy)
 		assert(self.Loaded, "Key is not loaded. Call `Key:Load()` before reading or writing to it.")
 
-		local targetTbl = resolveTable(ProxyState[proxy].path)
+		const targetTbl = resolveTable(ProxyState[proxy].path)
 		return targetTbl and #targetTbl or 0
 	end
 
-	self.Loaded = not not load
 	rawset(self :: any, "Data", createProxy({}))
 
+	-- BLOCKING:
+
+	self.Loaded = false
+	if load then self:Load() end
+
 	-- Handle autosave
-	local autosaveInterval = options.AutosaveInterval or 300
+	const autosaveInterval = options.AutosaveInterval or 300
 	if autosaveInterval > 0 then
 		Scythe.add(
 			self._scythe,

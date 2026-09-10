@@ -1,20 +1,20 @@
 --!strict
 
 -- Services
-local Players = game:GetService("Players")
+const Players = game:GetService("Players")
 -- Modules
-local Key = require(script.Parent.Key)
-local Promise = require(script.Parent.Parent.roblox_packages.Promise)
-local Session = require(script.Parent.Session)
-local types = require(script.Parent.types)
+const Key = require(script.Parent.Key)
+const Promise = require(script.Parent.Parent.roblox_packages.Promise)
+const Session = require(script.Parent.Session)
+const types = require(script.Parent.types)
 
 --[=[
 	@class Profile
 	A Profile in ABSERDE acts as the orchestration layer for player data between multiple datastore keys.
 --]=]
 
-local AbserdeProfile = {}
-local AbserdeProfileClass = { metatable = { __index = AbserdeProfile } }
+const AbserdeProfile = {}
+const AbserdeProfileClass = { metatable = { __index = AbserdeProfile } }
 
 type _AbserdeProfile<T> = types.Profile<T> & {
 	_openingPromises: { [number]: { Promise.TypedPromise<types.Session<unknown>> } },
@@ -84,12 +84,12 @@ function AbserdeProfile.Open<T>(self: _AbserdeProfile<T>, user: types.user, slot
 	if self._sessions[slot or 1][userid] then return Promise.resolve(self._sessions[slot or 1][userid]) end
 	if self._openingPromises[slot or 1][userid] then return self._openingPromises[slot or 1][userid] end
 
-	local promise = Promise.new(function(resolve, reject)
+	local promise
+	promise = Promise.new(function(resolve, reject)
+		self._openingPromises[slot or 1][userid] = promise
+
 		local s, session = pcall(Session.new, self.Options, userid, slot or 1, nil)
-		if not s then
-			self._openingPromises[slot or 1][userid] = nil
-			return reject(session)
-		end
+		if not s then return reject(session) end
 		self._sessions[slot or 1][userid] = session
 
 		-- Remove the session from the cache when it closes
@@ -116,11 +116,11 @@ function AbserdeProfile.Open<T>(self: _AbserdeProfile<T>, user: types.user, slot
 			end)
 		end
 
-		self._openingPromises[slot or 1][userid] = nil
 		resolve(session)
+	end):finally(function()
+		self._openingPromises[slot or 1][userid] = nil
 	end)
 
-	self._openingPromises[slot or 1][userid] = promise
 	return promise
 end
 

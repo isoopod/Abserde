@@ -1,21 +1,21 @@
 --!strict
 
 -- Services
-local DataStoreService = game:GetService("DataStoreService")
-local MemoryStoreService = game:GetService("MemoryStoreService")
-local TestService = game:GetService("TestService")
+const DataStoreService = game:GetService("DataStoreService")
+const MemoryStoreService = game:GetService("MemoryStoreService")
+const TestService = game:GetService("TestService")
 -- Modules
-local Courier = require(script.Parent.Courier)
-local Key = require(script.Parent.Key)
-local Pack = require(script.Parent.Parent.roblox_packages.Pack)
-local Promise = require(script.Parent.Parent.roblox_packages.Promise)
-local Scythe = require(script.Parent.Parent.roblox_packages.Scythe)
-local Signal = require(script.Parent.Parent.roblox_packages.Signal)
-local Utils = require(script.Parent.Utils)
-local types = require(script.Parent.types)
+const Courier = require(script.Parent.Courier)
+const Key = require(script.Parent.Key)
+const Pack = require(script.Parent.Parent.roblox_packages.Pack)
+const Promise = require(script.Parent.Parent.roblox_packages.Promise)
+const Scythe = require(script.Parent.Parent.roblox_packages.Scythe)
+const Signal = require(script.Parent.Parent.roblox_packages.Signal)
+const Utils = require(script.Parent.Utils)
+const types = require(script.Parent.types)
 
-local AbserdeSession = {}
-local AbserdeSessionClass = { metatable = { __index = AbserdeSession } }
+const AbserdeSession = {}
+const AbserdeSessionClass = { metatable = { __index = AbserdeSession } }
 type _AbserdeSession<T> = types.Session<T> & {
 	_closingPromise: Promise.TypedPromise<>?,
 	_readOnly: boolean,
@@ -27,9 +27,9 @@ type _AbserdeSession<T> = types.Session<T> & {
 
 AbserdeSession.ClassName = "AbserdeSession"
 
-local datastoreCache: { [string]: DataStore } = {}
+const datastoreCache: { [string]: DataStore } = {}
 function AbserdeSessionClass.getDataStore(profileName: string, key: string, slot: number): DataStore
-	local cacheKey = `{profileName}_{key}{slot - 1}`
+	const cacheKey = `{profileName}_{key}{slot - 1}`
 	if not datastoreCache[cacheKey] then datastoreCache[cacheKey] = DataStoreService:GetDataStore(cacheKey) end
 	return datastoreCache[cacheKey]
 end
@@ -37,12 +37,12 @@ end
 function AbserdeSession._Lock<T>(self: _AbserdeSession<T>): Promise.TypedPromise<boolean>
 	if getmetatable(self) == "AbserdeTombstone" then return Promise.resolve(false) end
 	if self._readOnly then return Promise.resolve(false) end
-	local interval, user, memlock = self.Profile.LockInterval or 60, tostring(self.User), self._memlock
+	const interval, user, memlock = self.Profile.LockInterval or 60, tostring(self.User), self._memlock
 
 	return Promise.retryWithDelay(function()
 		return Promise.new(function(resolve, reject)
 			local jobId
-			local success, result = pcall(memlock.UpdateAsync, memlock, user, function(oldValue: string?)
+			const success, result = pcall(memlock.UpdateAsync, memlock, user, function(oldValue: string?)
 				jobId = oldValue
 				-- Return JobId to lock, or nil if already locked by someone else
 				return if jobId == nil or jobId == game.JobId then game.JobId else nil
@@ -68,10 +68,10 @@ end
 function AbserdeSession._Unlock<T>(self: _AbserdeSession<T>): Promise.TypedPromise<>
 	if getmetatable(self) == "AbserdeTombstone" then return Promise.resolve() end
 	if not self.Locked then return Promise.resolve() end
-	local user, memlock = tostring(self.User), self._memlock
+	const user, memlock = tostring(self.User), self._memlock
 
 	return Promise.new(function(resolve, reject)
-		local success, err = pcall(memlock.RemoveAsync, memlock, user)
+		const success, err = pcall(memlock.RemoveAsync, memlock, user)
 		if not success then
 			warn(`Failed to release lock for session {self.Profile.Name}:{self.User}: {err}`)
 			return reject(err)
@@ -83,7 +83,7 @@ end
 
 function AbserdeSession.Save<T>(self: _AbserdeSession<T>)
 	if getmetatable(self :: any) == "AbserdeTombstone" then return Promise.resolve() end
-	local promises: { any } = {}
+	const promises: { any } = {}
 	for name, key in self.Keys :: { [string]: Key._Key<unknown> } do
 		table.insert(
 			promises,
@@ -97,7 +97,7 @@ function AbserdeSession.Save<T>(self: _AbserdeSession<T>)
 	end
 
 	return Promise.all(promises):andThen(function(results)
-		local failed: { any } = {}
+		const failed: { any } = {}
 		for _, result in results do
 			if not result.success then table.insert(failed, result.name) end
 		end
@@ -109,7 +109,7 @@ end
 function AbserdeSession.Release<T>(self: _AbserdeSession<T>)
 	if getmetatable(self :: any) == "AbserdeTombstone" then return Promise.resolve() end
 
-	local promise = self:_Unlock()
+	const promise = self:_Unlock()
 
 	promise:andThen(function()
 		for _, key in self.Keys :: { Key._Key<unknown> } do
@@ -125,7 +125,7 @@ function AbserdeSession.Close<T>(self: _AbserdeSession<T>)
 
 	if self._closingPromise ~= nil then return self._closingPromise end
 
-	self._closingPromise = Promise.new(function(resolve)
+	self._closingPromise = Promise.defer(function(resolve)
 		Scythe.clean(self._scythe)
 
 		-- If there are ongoing saves in any keys, cancel them so the latest data is saved on close
@@ -153,6 +153,7 @@ function AbserdeSession.Close<T>(self: _AbserdeSession<T>)
 		setmetatable(self, Utils.TOMBSTONE_METATABLE)
 		resolve()
 	end)
+
 	return self._closingPromise :: any
 end
 

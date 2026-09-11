@@ -85,6 +85,7 @@ function AbserdeSession.Save<T>(self: _AbserdeSession<T>)
 	if getmetatable(self :: any) == "AbserdeTombstone" then return Promise.resolve() end
 	const promises: { any } = {}
 	for name, key in self.Keys :: { [string]: Key._Key<unknown> } do
+		if getmetatable(key :: any) == "AbserdeTombstone" then continue end
 		table.insert(
 			promises,
 			key:_Save():andThen(function()
@@ -130,6 +131,7 @@ function AbserdeSession.Close<T>(self: _AbserdeSession<T>)
 
 		-- If there are ongoing saves in any keys, cancel them so the latest data is saved on close
 		for _, key in self.Keys :: { [string]: Key._Key<unknown> } do
+			if getmetatable(key :: any) == "AbserdeTombstone" then continue end
 			if key._savingPromise and key._savingPromise:getStatus() == "Started" then key._savingPromise:cancel() end
 		end
 
@@ -145,6 +147,7 @@ function AbserdeSession.Close<T>(self: _AbserdeSession<T>)
 		self.Closing:Destroy()
 
 		for _, key in self.Keys :: { [string]: Key._Key<unknown> } do
+			if getmetatable(key :: any) == "AbserdeTombstone" then continue end
 			key:_Destroy()
 		end
 

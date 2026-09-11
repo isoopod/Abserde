@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- Fix error when attempting to cancel a save on a destroyed key while closing a session.
+
 ## [0.2.1] - 2026-09-10
 
 ### Fixed

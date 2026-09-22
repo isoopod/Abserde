@@ -15,6 +15,8 @@ pub struct AuthArgs {
     force: bool,
 }
 
+const API_KEYS_URL: &str = "https://create.roblox.com/dashboard/credentials";
+
 pub fn run(args: AuthArgs) -> Result<()> {
     let universe_id = get_config()?
         .universe_id
@@ -46,9 +48,16 @@ pub fn run(args: AuthArgs) -> Result<()> {
 
     let creds = match selection {
         "Open Cloud API Key" => {
-            println!("\nGenerate a key at https://create.roblox.com/dashboard/credentials");
+            println!("Generate a key in browser ...");
             println!(
-                "Ensure permissions include 'universe:read' and 'universe:write' for universe {universe_id}.\n"
+                "If it does not open automatically, navigate to:\n{}",
+                API_KEYS_URL
+            );
+
+            let _ = open::that(API_KEYS_URL);
+
+            println!(
+                "\nEnsure permissions include 'universe:read' and 'universe:write' for universe {universe_id}.\n"
             );
 
             let api_key = Password::new("Enter Roblox Open Cloud API Key:")

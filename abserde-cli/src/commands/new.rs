@@ -1,10 +1,12 @@
 use anyhow::{Context, Result};
 use clap::{Args, ValueEnum};
 
-use crate::commands::{
-    get_project_path,
-    init::{create_dir, write_file},
-    update,
+use crate::{
+    commands::{
+        init::{create_dir, write_file},
+        update,
+    },
+    config::get_project_path,
 };
 
 #[derive(Args)]
@@ -43,9 +45,7 @@ impl ArtefactKind {
 }
 
 pub fn run(args: NewArgs) -> Result<()> {
-    let project_path = get_project_path()?.ok_or_else(|| {
-        anyhow::anyhow!("No project found in the current directory. Run `abserde init` first.")
-    })?;
+    let project_path = get_project_path()?;
 
     let dir = project_path.join(args.kind.directory());
     let file_path = dir.join(format!("{}.luau", args.name));

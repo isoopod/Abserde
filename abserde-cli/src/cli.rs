@@ -1,6 +1,6 @@
 use clap::{Parser, Subcommand};
 
-use crate::commands::{init, new, update};
+use crate::commands::{auth, deauth, init, new, update};
 
 #[derive(Parser)]
 #[command(
@@ -23,6 +23,10 @@ pub enum Commands {
     ///
     /// Changes to comments or code format will trigger an update.
     Update,
+    /// Authenticate and save credentials for this universe.
+    Auth(auth::AuthArgs),
+    /// Revoke and remove the saved credential for this universe.
+    Deauth(deauth::DeauthArgs),
 }
 
 pub fn run() -> anyhow::Result<()> {
@@ -32,5 +36,8 @@ pub fn run() -> anyhow::Result<()> {
         Commands::Init(args) => init::run(args),
         Commands::New(args) => new::run(args),
         Commands::Update => update::run(),
+        Commands::Auth(args) => auth::run(args),
+        Commands::Deauth(args) => deauth::run(args),
+        // _ => anyhow::bail!("Unexpected command"),
     }
 }

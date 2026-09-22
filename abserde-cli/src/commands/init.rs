@@ -1,6 +1,9 @@
 use anyhow::Context;
 use clap::Args;
+use inquire::Text;
 use std::{fs, io::Write, path::Path};
+
+use crate::config::AbserdeConfig;
 
 #[derive(Args)]
 pub struct InitArgs {
@@ -9,6 +12,10 @@ pub struct InitArgs {
     /// Should be relative to the current working directory.
     #[arg(short, long, default_value = ".")]
     pub path: String,
+
+    /// Skip interactive prompts and use defaults.
+    #[arg(short, long)]
+    pub yes: bool,
 }
 
 enum TemplateNode {
@@ -111,26 +118,54 @@ fn write_node(base: &Path, node: &TemplateNode) -> anyhow::Result<()> {
 
 pub fn run(args: InitArgs) -> anyhow::Result<()> {
     let cwd = std::env::current_dir()?;
-    let path = cwd.join(args.path);
+    let target_path = cwd.join(args.path);
 
-    write_node(&path, &PROJECT_TEMPLATE)?;
+    let universe_id = if args.yes {
+        None
+    } else {
+        println!("Welcome to Abserde Init.");
 
-    // Create the .abserde folder and save where the template was written to
+        let input = Text::new("(optional) Roblox Universe ID:")
+            .with_help_message("Press enter to skip")
+            .prompt()?;
+
+        let trimmed = input.trim();
+        if trimmed.is_empty() {
+            None
+        } else {
+            Some(
+                trimmed
+                    .parse::<u64>()
+                    .context("Invalid Universe ID. Please enter a positive integer.")?,
+            )
+        }
+    };
+
+    write_node(&target_path, &PROJECT_TEMPLATE)?;
+
+    // Save configuration into .abserde/config.json
     let abserde_dir = cwd.join(".abserde");
     create_dir(&abserde_dir)?;
 
-    let relative = path.strip_prefix(&cwd).unwrap_or(&path);
-    fs::write(
-        &abserde_dir.join("project_path"),
-        relative
-            .join("abserde_project")
-            .to_str()
-            .ok_or_else(|| anyhow::anyhow!("Project path contains invalid UTF-8"))?,
-    )?;
+    let relative_target = target_path.strip_prefix(&cwd).unwrap_or(&target_path);
+    let project_relative_path = relative_target.join("abserde_project");
 
-    println!("Initialized new Abserde project at {}", path.display());
-    println!("Rename the ExampleSchema and run `abserde update` before modifying it.");
-    println!("Or remove it and use `abserde new schema --name ...` to create a new one.");
+    let config = AbserdeConfig {
+        project_path: project_relative_path,
+        universe_id,
+    };
+
+    let config_json = serde_json::to_string_pretty(&config)?;
+    fs::write(abserde_dir.join("config.json"), config_json)
+        .context("Failed to save .abserde/config.json")?;
+
+    println!(
+        "\nInitialized new Abserde project at {}",
+        target_path.display()
+    );
+    println!("\nNext steps:");
+    println!("  1. Rename ExampleSchema.luau or create a new one with `abserde new schema`");
+    println!("  2. Run `abserde update` before modifying it");
 
     Ok(())
 }

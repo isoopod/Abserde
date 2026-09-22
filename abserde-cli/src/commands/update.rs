@@ -8,7 +8,7 @@ use std::{
 use serde::{Deserialize, Serialize};
 use xxhash_rust::xxh3::Xxh3;
 
-use crate::commands::get_project_path;
+use crate::config::get_project_path;
 
 #[derive(Serialize, Deserialize, Default)]
 struct SnapshotState {
@@ -32,9 +32,7 @@ fn hash_file(path: &Path) -> io::Result<u64> {
 }
 
 pub fn run() -> anyhow::Result<()> {
-    let project = get_project_path()?.ok_or_else(|| {
-        anyhow::anyhow!("No project found in the current directory. Run `abserde init` first.")
-    })?;
+    let project = get_project_path()?;
     let schemas = project.join("Schemas");
 
     let cwd = std::env::current_dir()?;

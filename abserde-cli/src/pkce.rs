@@ -69,43 +69,50 @@ pub async fn run_oidc_flow(client_id: &str, scopes: &[&str]) -> Result<OidcToken
     let _ = open::that(auth_url.as_str());
 
     // Wait for incoming browser request
-    let request = server
-        .recv()
-        .map_err(|e| anyhow!("Failed to receive redirect: {e}"))?;
+    let expected_csrf = csrf_token.secret().clone();
+    let code = tokio::task::spawn_blocking(move || -> Result<openidconnect::AuthorizationCode> {
+        let request = server
+            .recv()
+            .map_err(|e| anyhow!("Failed to receive redirect: {e}"))?;
 
-    let req_url = format!("http://localhost{}", request.url());
-    let parsed_url = Url::parse(&req_url)?;
-    let query_params: HashMap<String, String> = parsed_url.query_pairs().into_owned().collect();
+        let req_url = format!("http://localhost{}", request.url());
+        let parsed_url = Url::parse(&req_url)?;
+        let query_params: HashMap<String, String> = parsed_url.query_pairs().into_owned().collect();
 
-    // Verify CSRF state matches
-    if let Some(state) = query_params.get("state") {
-        if state != csrf_token.secret() {
-            let response =
-                Response::from_string("<h1>CSRF State Mismatch</h1>").with_status_code(400);
-            let _ = request.respond(response);
-            bail!("CSRF state mismatch detected");
+        // Verify CSRF state matches
+        if let Some(state) = query_params.get("state") {
+            if state != &expected_csrf {
+                let response =
+                    Response::from_string("<h1>CSRF State Mismatch</h1>").with_status_code(400);
+                let _ = request.respond(response);
+                bail!("CSRF state mismatch detected");
+            }
         }
-    }
 
-    let code = match query_params.get("code") {
-        Some(c) => openidconnect::AuthorizationCode::new(c.to_string()),
-        None => {
-            let err = query_params
-                .get("error_descriptor")
-                .cloned()
-                .unwrap_or_else(|| "Authorization was denied or failed".into());
+        let code = match query_params.get("code") {
+            Some(c) => openidconnect::AuthorizationCode::new(c.to_string()),
+            None => {
+                let err = query_params
+                    .get("error_descriptor")
+                    .cloned()
+                    .unwrap_or_else(|| "Authorization was denied or failed".into());
 
-            let response =
-                Response::from_string(format!("<h1>Authentication Failed</h1><p>{err}</p>"))
-                    .with_status_code(400);
-            let _ = request.respond(response);
-            bail!("OIDC login failed: {err}");
-        }
-    };
+                let response =
+                    Response::from_string(format!("<h1>Authentication Failed</h1><p>{err}</p>"))
+                        .with_status_code(400);
+                let _ = request.respond(response);
+                bail!("OIDC login failed: {err}");
+            }
+        };
 
-    let response =
-        Response::from_string("<h1>Authentication Success</h1><p>You can close this tab.</p>");
-    let _ = request.respond(response);
+        let response =
+            Response::from_string("<h1>Authentication Success</h1><p>You can close this tab.</p>");
+        let _ = request.respond(response);
+
+        Ok(code)
+    })
+    .await
+    .context("Blocking HTTP listener task panicked")??;
 
     // Exchange code + pcke verifier for tokens
     let token_response = client

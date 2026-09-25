@@ -1,4 +1,4 @@
-use anyhow::{Context, Result, anyhow, bail};
+use anyhow::{Result, anyhow, bail};
 use clap::Args;
 use inquire::{Confirm, Password, Select};
 
@@ -17,7 +17,7 @@ pub struct AuthArgs {
 
 const API_KEYS_URL: &str = "https://create.roblox.com/dashboard/credentials";
 
-pub fn run(args: AuthArgs) -> Result<()> {
+pub async fn run(args: AuthArgs) -> Result<()> {
     let universe_id = get_config()?
         .universe_id
         .ok_or_else(|| anyhow!("'universe_id' needs to be set in .abserde/config.json"))?;
@@ -83,12 +83,7 @@ pub fn run(args: AuthArgs) -> Result<()> {
             // Scopes required for Open Cloud APIs
             let scopes = vec!["openid", "universe.config:read", "universe.config:write"];
 
-            let runtime = tokio::runtime::Builder::new_multi_thread()
-                .enable_all()
-                .build()
-                .context("Failed to build Tokio runtime")?;
-
-            let tokens = runtime.block_on(run_oidc_flow(CLIENT_ID, &scopes))?;
+            let tokens = run_oidc_flow(CLIENT_ID, &scopes).await?;
 
             let now = std::time::SystemTime::now()
                 .duration_since(std::time::UNIX_EPOCH)?

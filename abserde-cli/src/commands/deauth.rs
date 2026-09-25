@@ -15,7 +15,7 @@ pub struct DeauthArgs {
     force: bool,
 }
 
-pub fn run(args: DeauthArgs) -> Result<()> {
+pub async fn run(args: DeauthArgs) -> Result<()> {
     let universe_id = get_config()?
         .universe_id
         .ok_or_else(|| anyhow!("'universe_id' needs to be set in .abserde/config.json"))?;
@@ -49,11 +49,7 @@ pub fn run(args: DeauthArgs) -> Result<()> {
         if let Some(ref refresh_token) = creds.refresh_token {
             print!("Revoking OAuth session with Roblox...");
 
-            let runtime = tokio::runtime::Builder::new_multi_thread()
-                .enable_all()
-                .build()?;
-
-            match runtime.block_on(revoke_oidc_token(CLIENT_ID, refresh_token)) {
+            match revoke_oidc_token(CLIENT_ID, refresh_token).await {
                 Ok(_) => println!(" Done."),
                 Err(err) => {
                     eprintln!("\nFailed to revoke OAuth token upstream: {err}");

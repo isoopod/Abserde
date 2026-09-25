@@ -1,6 +1,9 @@
 use clap::{Parser, Subcommand};
 
-use crate::commands::{auth, deauth, init, new, update};
+use crate::{
+    commands::{auth, deauth, init, new, rtbf, update},
+    s_await,
+};
 
 #[derive(Parser)]
 #[command(
@@ -27,6 +30,11 @@ pub enum Commands {
     Auth(auth::AuthArgs),
     /// Revoke and remove the saved credential for this universe.
     Deauth(deauth::DeauthArgs),
+    /// Compile the RTBF templates for the abserde project and publish them.
+    /// RTBF templates automatically handle right to be forgotten requests for your datastores.
+    ///
+    /// Will overwrite any existing RTBF templates, including those outside of Abserde.
+    Rtbf(rtbf::RtbfArgs),
 }
 
 pub fn run() -> anyhow::Result<()> {
@@ -36,8 +44,8 @@ pub fn run() -> anyhow::Result<()> {
         Commands::Init(args) => init::run(args),
         Commands::New(args) => new::run(args),
         Commands::Update => update::run(),
-        Commands::Auth(args) => auth::run(args),
-        Commands::Deauth(args) => deauth::run(args),
-        // _ => anyhow::bail!("Unexpected command"),
+        Commands::Auth(args) => s_await(auth::run(args)),
+        Commands::Deauth(args) => s_await(deauth::run(args)),
+        Commands::Rtbf(args) => s_await(rtbf::run(args)),
     }
 }

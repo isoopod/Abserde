@@ -7,9 +7,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- (CLI): Added command to automatically generate and publish RTBF templates for your abserde project.
+- (CLI): Secure storage for user API keys or OAuth (not implemented yet).
+- (CLI): Prompt for Universe Id and improve Init UX with the Inquire crate.
+
 ### Fixed
 
 - Fix error when attempting to cancel a save on a destroyed key while closing a session.
+
+### Changed
+
+- (CLI): Config is now stored in `.abserde/config.json`. Manual migration will be needed for existing projects.
+  The file containing the path to the abserde_project should be a key called "project_path", and the universe
+  associated with the project should be "universe_id" as a number.
 
 ## [0.2.1] - 2026-09-10
 

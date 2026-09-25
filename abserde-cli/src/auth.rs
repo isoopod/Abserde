@@ -1,6 +1,9 @@
 use anyhow::{Context, Result};
 use keyring::Entry;
+use reqwest::RequestBuilder;
 use serde::{Deserialize, Serialize};
+
+use crate::pkce::{CLIENT_ID, get_valid_access_token};
 
 const SERVICE_NAME: &str = "abserde_cli";
 
@@ -49,5 +52,30 @@ pub fn delete_credentials(universe_id: u64) -> Result<bool> {
         Ok(_) => Ok(true),
         Err(keyring::Error::NoEntry) => Ok(false),
         Err(err) => Err(err).context("Failed to delete credentials from system keyring"),
+    }
+}
+
+pub async fn authenticate_request(
+    builder: RequestBuilder,
+    universe_id: u64,
+) -> Result<RequestBuilder> {
+    let creds = load_credentials(universe_id)?.with_context(|| format!("No stored credentials found for Universe {universe_id}. Please run `abserde auth` first."))?;
+
+    match creds.auth_type {
+        AuthType::OpenCloudApiKey => Ok(builder.header("x-api-key", creds.secret)),
+        AuthType::OAuth2AccessToken => {
+            let token = get_valid_access_token(universe_id, CLIENT_ID).await?;
+            Ok(builder.header("Authorization", format!("Bearer {token}")))
+        }
+    }
+}
+
+pub trait AuthenticateExt {
+    fn authenticate(self, universe_id: u64) -> impl Future<Output = Result<RequestBuilder>> + Send;
+}
+
+impl AuthenticateExt for RequestBuilder {
+    async fn authenticate(self, universe_id: u64) -> Result<RequestBuilder> {
+        authenticate_request(self, universe_id).await
     }
 }

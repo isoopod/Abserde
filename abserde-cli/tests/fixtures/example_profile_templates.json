@@ -1,0 +1,53 @@
+{
+  "user_data_templates": [
+    {
+      "key_template": {
+        "data_store_type": "STANDARD",
+        "data_store_name": "MainProfile_Main0",
+        "key_patten": "{UserId}"
+      }
+    },
+    {
+      "key_template": {
+        "data_store_type": "STANDARD",
+        "data_store_name": "MainProfile_Main1",
+        "key_patten": "{UserId}"
+      }
+    },
+    {
+      "key_template": {
+        "data_store_type": "STANDARD",
+        "data_store_name": "MainProfile_Main2",
+        "key_patten": "{UserId}"
+      }
+    },
+    {
+      "key_template": {
+        "data_store_type": "STANDARD",
+        "data_store_name": "MainProfile_Inventory0",
+        "key_patten": "{UserId}"
+      }
+    },
+    {
+      "key_template": {
+        "data_store_type": "STANDARD",
+        "data_store_name": "MainProfile_Inventory1",
+        "key_patten": "{UserId}"
+      }
+    },
+    {
+      "key_template": {
+        "data_store_type": "STANDARD",
+        "data_store_name": "MainProfile_Inventory2",
+        "key_patten": "{UserId}"
+      }
+    },
+    {
+      "key_template": {
+        "data_store_type": "STANDARD",
+        "data_store_name": "MainProfile_Settings0",
+        "key_patten": "{UserId}"
+      }
+    }
+  ]
+}
